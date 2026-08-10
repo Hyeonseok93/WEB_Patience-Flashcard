@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.docker-secrets/
+
+**/node_modules/
+**/dist/
+**/build/
+**/.gradle/
+**/__pycache__/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml

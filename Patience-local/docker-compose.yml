@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-patience}
+      POSTGRES_USER: ${POSTGRES_USER:-patience}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-patience-local-change-me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-patience} -d ${POSTGRES_DB:-patience}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../Patience-backend
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-patience}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-patience}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-patience-local-change-me}
+      JWT_SECRET: ${JWT_SECRET:-patience-local-jwt-secret-change-me-32b}
+      JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../Patience-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
