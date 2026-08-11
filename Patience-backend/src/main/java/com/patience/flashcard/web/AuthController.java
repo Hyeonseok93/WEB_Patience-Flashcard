@@ -4,6 +4,8 @@ import com.patience.flashcard.service.AuthService;
 import com.patience.flashcard.web.dto.LoginRequest;
 import com.patience.flashcard.web.dto.SignupRequest;
 import com.patience.flashcard.web.dto.UserResponse;
+import com.patience.flashcard.web.dto.UsernameAvailableResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -23,9 +26,18 @@ public class AuthController {
     this.authService = authService;
   }
 
+  @GetMapping("/username-available")
+  public UsernameAvailableResponse usernameAvailable(
+      @RequestParam(required = false) String username) {
+    return authService.usernameAvailable(username);
+  }
+
   @PostMapping("/signup")
-  public UserResponse signup(@Valid @RequestBody SignupRequest request, HttpServletResponse response) {
-    return authService.signup(request, response);
+  public UserResponse signup(
+      @Valid @RequestBody SignupRequest request,
+      HttpServletRequest httpRequest,
+      HttpServletResponse response) {
+    return authService.signup(request, httpRequest.getRemoteAddr(), response);
   }
 
   @PostMapping("/login")

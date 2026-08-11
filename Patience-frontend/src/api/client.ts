@@ -90,6 +90,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => request<User>("/api/auth/me"),
+  usernameAvailable: (username: string) =>
+    request<{ username: string; available: boolean; message: string }>(
+      `/api/auth/username-available?username=${encodeURIComponent(username)}`,
+    ),
   signup: (username: string, password: string) =>
     request<User>("/api/auth/signup", {
       method: "POST",

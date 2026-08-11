@@ -2,7 +2,6 @@ package com.patience.flashcard.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.patience.flashcard.config.ImportProperties;
 import com.patience.flashcard.domain.Card;
 import com.patience.flashcard.domain.Deck;
 import com.patience.flashcard.domain.DeckSourceType;
@@ -16,7 +15,6 @@ import com.patience.flashcard.web.dto.CardResponse;
 import com.patience.flashcard.web.dto.CardUpsertRequest;
 import com.patience.flashcard.web.dto.DeckDetailResponse;
 import com.patience.flashcard.web.dto.DeckSummaryResponse;
-import java.io.InputStream;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,12 +23,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,20 +34,19 @@ public class DeckService {
   private final DeckRepository deckRepository;
   private final CardRepository cardRepository;
   private final StudyProgressRepository progressRepository;
-  private final ImportProperties importProperties;
+  private final XlsxDeckImporter xlsxImporter;
   private final ObjectMapper objectMapper;
-  private final DataFormatter formatter = new DataFormatter();
 
   public DeckService(
       DeckRepository deckRepository,
       CardRepository cardRepository,
       StudyProgressRepository progressRepository,
-      ImportProperties importProperties,
+      XlsxDeckImporter xlsxImporter,
       ObjectMapper objectMapper) {
     this.deckRepository = deckRepository;
     this.cardRepository = cardRepository;
     this.progressRepository = progressRepository;
-    this.importProperties = importProperties;
+    this.xlsxImporter = xlsxImporter;
     this.objectMapper = objectMapper;
   }
 
@@ -138,10 +129,10 @@ public class DeckService {
 
   @Transactional
   public DeckSummaryResponse importXlsx(UserAccount user, String deckName, MultipartFile file) {
-    validateUpload(file);
+    xlsxImporter.validateUpload(file);
     String name = resolveDeckName(user, deckName, file.getOriginalFilename(), null);
 
-    List<ParsedCard> parsed = parseXlsx(file);
+    List<XlsxDeckImporter.ParsedCard> parsed = xlsxImporter.parse(file);
     if (parsed.isEmpty()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "유효한 카드 행이 없습니다. A열=앞면, B열=뒷면을 확인하세요.");
     }
@@ -170,8 +161,8 @@ public class DeckService {
   @Transactional
   public DeckSummaryResponse replaceMineXlsx(Long deckId, UserAccount user, MultipartFile file) {
     Deck deck = requireOwnedUserDeck(deckId, user);
-    validateUpload(file);
-    List<ParsedCard> parsed = parseXlsx(file);
+    xlsxImporter.validateUpload(file);
+    List<XlsxDeckImporter.ParsedCard> parsed = xlsxImporter.parse(file);
     if (parsed.isEmpty()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "유효한 카드 행이 없습니다. A열=앞면, B열=뒷면을 확인하세요.");
     }
@@ -263,10 +254,10 @@ public class DeckService {
     return deck;
   }
 
-  private List<Card> buildCards(Deck deck, List<ParsedCard> parsed) {
+  private List<Card> buildCards(Deck deck, List<XlsxDeckImporter.ParsedCard> parsed) {
     int order = 1;
     List<Card> cards = new ArrayList<>();
-    for (ParsedCard row : parsed) {
+    for (XlsxDeckImporter.ParsedCard row : parsed) {
       Card card = new Card();
       card.setDeck(deck);
       card.setFrontText(row.front());
@@ -277,9 +268,9 @@ public class DeckService {
     return cards;
   }
 
-  private void rejectDuplicateFronts(List<ParsedCard> parsed) {
+  private void rejectDuplicateFronts(List<XlsxDeckImporter.ParsedCard> parsed) {
     Set<String> seen = new HashSet<>();
-    for (ParsedCard row : parsed) {
+    for (XlsxDeckImporter.ParsedCard row : parsed) {
       String key = row.front().toLowerCase(Locale.ROOT);
       if (!seen.add(key)) {
         throw new ApiException(HttpStatus.BAD_REQUEST, "앞면이 중복된 카드가 있습니다: " + row.front());
@@ -311,27 +302,6 @@ public class DeckService {
         deck.getUpdatedAt());
   }
 
-  private void validateUpload(MultipartFile file) {
-    if (file == null || file.isEmpty()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "파일이 비어 있습니다.");
-    }
-    if (file.getSize() > importProperties.maxBytes()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "파일 용량이 너무 큽니다. (최대 2MB)");
-    }
-    String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
-    if (!filename.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "xlsx 파일만 업로드할 수 있습니다.");
-    }
-    String contentType = file.getContentType();
-    if (contentType != null
-        && !contentType.contains("spreadsheet")
-        && !contentType.contains("excel")
-        && !contentType.equals("application/octet-stream")
-        && !contentType.equals("application/zip")) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "허용되지 않은 파일 형식입니다.");
-    }
-  }
-
   private String resolveDeckName(
       UserAccount user, String requested, String filename, Long excludeDeckId) {
     String name =
@@ -359,56 +329,4 @@ public class DeckService {
     return idx > 0 ? filename.substring(0, idx) : filename;
   }
 
-  private static final int MAX_CARD_TEXT = 2000;
-
-  private List<ParsedCard> parseXlsx(MultipartFile file) {
-    List<ParsedCard> rows = new ArrayList<>();
-    try (InputStream in = file.getInputStream();
-        Workbook workbook = new XSSFWorkbook(in)) {
-      Sheet sheet = workbook.getSheetAt(0);
-      if (sheet == null) {
-        return rows;
-      }
-      for (Row row : sheet) {
-        if (row == null || row.getRowNum() == 0 && looksLikeHeader(row)) {
-          continue;
-        }
-        String front = cellText(row.getCell(0));
-        String back = cellText(row.getCell(1));
-        if (front.isBlank() || back.isBlank()) {
-          continue;
-        }
-        if (front.length() > MAX_CARD_TEXT || back.length() > MAX_CARD_TEXT) {
-          throw new ApiException(
-              HttpStatus.BAD_REQUEST, "카드 글자 수가 너무 많습니다. (앞·뒤 각 최대 " + MAX_CARD_TEXT + "자)");
-        }
-        rows.add(new ParsedCard(front, back));
-        if (rows.size() > importProperties.maxRows()) {
-          throw new ApiException(
-              HttpStatus.BAD_REQUEST, "카드 수가 너무 많습니다. (최대 " + importProperties.maxRows() + "행)");
-        }
-      }
-    } catch (ApiException ex) {
-      throw ex;
-    } catch (Exception ex) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "xlsx 파일을 읽을 수 없습니다.");
-    }
-    return rows;
-  }
-
-  private boolean looksLikeHeader(Row row) {
-    String a = cellText(row.getCell(0)).toLowerCase(Locale.ROOT);
-    String b = cellText(row.getCell(1)).toLowerCase(Locale.ROOT);
-    return (a.contains("front") || a.contains("앞") || a.contains("문제"))
-        && (b.contains("back") || b.contains("뒤") || b.contains("답"));
-  }
-
-  private String cellText(Cell cell) {
-    if (cell == null) {
-      return "";
-    }
-    return formatter.formatCellValue(cell).trim();
-  }
-
-  private record ParsedCard(String front, String back) {}
 }

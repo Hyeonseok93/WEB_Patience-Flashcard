@@ -157,7 +157,6 @@ class ProgressServiceTest {
 
   @Test
   void getReturnsExistingValidProgress() {
-    stubDeckCards();
     StudyProgress row = new StudyProgress();
     row.setLevelsJson("{\"1\":[11],\"2\":[12],\"3\":[]}");
     row.setQueueJson("[13]");
@@ -172,8 +171,7 @@ class ProgressServiceTest {
   }
 
   @Test
-  void getHealsCorruptProgressByDeletingAndReturningEmpty() {
-    stubDeckCards();
+  void getReturnsCorruptProgressWithoutDeleting() {
     StudyProgress row = new StudyProgress();
     row.setLevelsJson("{\"1\":[11],\"2\":[],\"3\":[]}");
     row.setQueueJson("[]");
@@ -182,8 +180,8 @@ class ProgressServiceTest {
 
     ProgressResponse response = progressService.get(user, 7L);
 
-    assertThat(response.exists()).isFalse();
-    assertThat(response.completedCount()).isZero();
-    verify(progressRepository).deleteByUserAndDeck(user, deck);
+    assertThat(response.exists()).isTrue();
+    assertThat(response.levelsJson()).isEqualTo("{\"1\":[11],\"2\":[],\"3\":[]}");
+    verify(progressRepository, never()).deleteByUserAndDeck(user, deck);
   }
 }

@@ -39,24 +39,18 @@ public class ProgressService {
   }
 
   /**
-   * Loads progress for continue-play. Corrupt rows (failing engine invariants) are deleted and
-   * reported as no progress so the client starts fresh.
+   * Read-only load. Invalid rows are returned as-is ({@code exists=true}) so the client can warn
+   * and reset; GET never mutates stored progress.
    */
-  @Transactional
+  @Transactional(readOnly = true)
   public ProgressResponse get(UserAccount user, Long deckId) {
     Deck deck = deckService.requireAccessible(deckId, user);
     return progressRepository
         .findByUserAndDeck(user, deck)
         .map(
-            p -> {
-              if (!isValidProgress(
-                  deck, p.getLevelsJson(), p.getQueueJson(), p.getCompletedCount())) {
-                progressRepository.deleteByUserAndDeck(user, deck);
-                return new ProgressResponse(deckId, EMPTY_LEVELS, EMPTY_QUEUE, 0, false);
-              }
-              return new ProgressResponse(
-                  deckId, p.getLevelsJson(), p.getQueueJson(), p.getCompletedCount(), true);
-            })
+            p ->
+                new ProgressResponse(
+                    deckId, p.getLevelsJson(), p.getQueueJson(), p.getCompletedCount(), true))
         .orElseGet(() -> new ProgressResponse(deckId, EMPTY_LEVELS, EMPTY_QUEUE, 0, false));
   }
 
@@ -79,16 +73,6 @@ public class ProgressService {
   public void reset(UserAccount user, Long deckId) {
     Deck deck = deckService.requireAccessible(deckId, user);
     progressRepository.deleteByUserAndDeck(user, deck);
-  }
-
-  private boolean isValidProgress(
-      Deck deck, String levelsJson, String queueJson, int completedCount) {
-    try {
-      requireValidProgress(deck, levelsJson, queueJson, completedCount);
-      return true;
-    } catch (ApiException ex) {
-      return false;
-    }
   }
 
   /**

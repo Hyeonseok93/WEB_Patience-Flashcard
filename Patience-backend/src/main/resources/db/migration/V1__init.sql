@@ -1,6 +1,7 @@
 CREATE TABLE users (
     id              BIGSERIAL PRIMARY KEY,
-    username        VARCHAR(64)  NOT NULL UNIQUE,
+    username        VARCHAR(64)  NOT NULL UNIQUE
+                    CHECK (username = LOWER(username)),
     password_hash   VARCHAR(255) NOT NULL,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );

@@ -221,7 +221,7 @@ body {
 }
 
 .animate-card-in {
-  animation: card-in-right 0.34s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: card-in-right var(--card-in-ms, 0.34s) cubic-bezier(0.2, 0.7, 0.2, 1) both;
   will-change: transform, opacity;
 }
 
@@ -237,6 +237,6 @@ body {
 }
 
 .animate-stack-in {
-  animation: stack-in-right 0.36s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: stack-in-right var(--stack-in-ms, 0.36s) cubic-bezier(0.2, 0.7, 0.2, 1) both;
   will-change: transform, opacity;
 }

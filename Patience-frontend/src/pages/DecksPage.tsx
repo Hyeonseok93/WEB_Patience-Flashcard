@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type DeckSummary } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import { takeJustJoined } from "../auth/welcome";
 import { messageOf } from "../lib/errors";
 import { useConfirm } from "../ui/confirm-context";
 import LevelPicker from "../ui/LevelPicker";
@@ -27,6 +28,7 @@ export default function DecksPage() {
   const [deckName, setDeckName] = useState("");
   const [pickerMode, setPickerMode] = useState<"order" | "shuffle" | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [justJoined] = useState(() => takeJustJoined());
 
   useEffect(() => {
     let cancelled = false;
@@ -117,20 +119,20 @@ export default function DecksPage() {
   return (
     <div className="min-h-screen pb-40">
       <header className="sticky top-0 z-30 border-b border-[var(--mist)] bg-[var(--cream)]/80 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-4">
-          <div className="flex items-center gap-2.5">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-5 py-4 sm:gap-4">
+          <div className="flex min-w-0 items-center gap-2.5">
             <img
               src="/logo.png"
               alt=""
               className="h-9 w-9 shrink-0 select-none drop-shadow-sm"
               draggable={false}
             />
-            <p className="font-display text-[1.35rem] leading-none tracking-[-0.02em] text-[var(--moss)]">
+            <p className="truncate font-display text-[1.05rem] leading-none tracking-[-0.02em] text-[var(--moss)] sm:text-[1.35rem]">
               Patience Flashcard
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="hidden rounded-full bg-white/70 px-3.5 py-1.5 text-sm font-medium text-[var(--ink)]/70 ring-1 ring-[var(--mist)] sm:inline">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <span className="max-w-[6.5rem] truncate rounded-full bg-white/70 px-2.5 py-1.5 text-sm font-medium text-[var(--ink)]/70 ring-1 ring-[var(--mist)] sm:max-w-[12rem] sm:px-3.5">
               {user?.username}
             </span>
             <button
@@ -146,10 +148,10 @@ export default function DecksPage() {
 
       <main className="mx-auto w-full max-w-6xl px-5 py-10">
         <h1 className="font-display text-[clamp(1.9rem,4vw,2.5rem)] font-semibold tracking-[-0.02em]">
-          오늘은 어떤 걸 외워볼까요
+          {justJoined ? `${justJoined}님, 자리 만들었어요.` : "오늘은 어떤 걸 외워볼까요"}
         </h1>
         <p className="mt-2 text-[0.95rem] text-[var(--ink)]/55">
-          원하는 세트를 골라 주세요.
+          {justJoined ? "오늘은 어떤 걸 외워볼까요." : "원하는 세트를 골라 주세요."}
         </p>
 
         <div

@@ -8,6 +8,7 @@ import com.patience.flashcard.web.ApiException;
 import com.patience.flashcard.web.dto.LoginRequest;
 import com.patience.flashcard.web.dto.SignupRequest;
 import com.patience.flashcard.web.dto.UserResponse;
+import com.patience.flashcard.web.dto.UsernameAvailableResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
@@ -25,21 +26,42 @@ public class AuthService {
   private final UserAccountRepository userRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtService jwtService;
+  private final SignupRateLimiter signupRateLimiter;
 
   public AuthService(
       UserAccountRepository userRepository,
       PasswordEncoder passwordEncoder,
-      JwtService jwtService) {
+      JwtService jwtService,
+      SignupRateLimiter signupRateLimiter) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
+    this.signupRateLimiter = signupRateLimiter;
+  }
+
+  @Transactional(readOnly = true)
+  public UsernameAvailableResponse usernameAvailable(String raw) {
+    String username = UsernameRules.normalize(raw);
+    String invalid = UsernameRules.invalidReason(username);
+    if (invalid != null) {
+      return new UsernameAvailableResponse(username, false, invalid);
+    }
+    if (userRepository.existsByUsernameIgnoreCase(username)) {
+      return new UsernameAvailableResponse(username, false, "이미 있어요");
+    }
+    return new UsernameAvailableResponse(username, true, "쓸 수 있어요");
   }
 
   @Transactional
-  public UserResponse signup(SignupRequest request, HttpServletResponse response) {
-    String username = request.username().trim();
-    if (userRepository.existsByUsername(username)) {
-      throw new ApiException(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다.");
+  public UserResponse signup(SignupRequest request, String clientIp, HttpServletResponse response) {
+    signupRateLimiter.assertAllowed(clientIp);
+    String username = UsernameRules.normalize(request.username());
+    String invalid = UsernameRules.invalidReason(username);
+    if (invalid != null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
+    }
+    if (userRepository.existsByUsernameIgnoreCase(username)) {
+      throw new ApiException(HttpStatus.CONFLICT, "이미 있어요");
     }
     UserAccount user = new UserAccount();
     user.setUsername(username);
@@ -49,7 +71,7 @@ public class AuthService {
       // at commit time, so a concurrent signup becomes a clean 409 rather than a 500.
       userRepository.saveAndFlush(user);
     } catch (DataIntegrityViolationException ex) {
-      throw new ApiException(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다.");
+      throw new ApiException(HttpStatus.CONFLICT, "이미 있어요");
     }
     writeAuthCookie(response, user);
     return toResponse(user);
@@ -57,9 +79,10 @@ public class AuthService {
 
   @Transactional(readOnly = true)
   public UserResponse login(LoginRequest request, HttpServletResponse response) {
+    String username = UsernameRules.normalize(request.username());
     UserAccount user =
         userRepository
-            .findByUsername(request.username().trim())
+            .findByUsernameIgnoreCase(username)
             .orElseThrow(() -> new BadCredentialsException("bad credentials"));
     if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
       throw new BadCredentialsException("bad credentials");
