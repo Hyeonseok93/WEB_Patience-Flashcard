@@ -5,8 +5,15 @@ import AuthStage from "../components/AuthStage";
 import { SignupForm } from "../components/SignupForm";
 
 export default function SignupPage() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
+  if (loading) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-[var(--cream)] text-sm text-[var(--ink)]/50">
+        확인 중…
+      </div>
+    );
+  }
   if (user) return <Navigate to="/" replace />;
 
   return (

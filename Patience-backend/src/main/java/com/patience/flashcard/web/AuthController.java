@@ -88,8 +88,8 @@ public class AuthController {
   }
 
   @PostMapping("/logout")
-  public void logout(HttpServletResponse response) {
-    authService.logout(response);
+  public void logout(Authentication authentication, HttpServletResponse response) {
+    authService.logout(authentication, response);
   }
 
   @GetMapping("/me")

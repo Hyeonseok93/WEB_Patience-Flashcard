@@ -57,22 +57,4 @@ WEB_Patience_Flashcard/
 └── Patience-local/        # docker-compose
 ```
 
-## 주요 API
-
-| Method | Path | 설명 |
-|--------|------|------|
-| POST | `/api/auth/signup` | 회원가입 + 쿠키 발급 |
-| POST | `/api/auth/login` | 로그인 |
-| POST | `/api/auth/logout` | 로그아웃 |
-| GET | `/api/auth/me` | 현재 사용자 |
-| GET | `/api/decks/builtin` | 기본 제공 세트 |
-| GET | `/api/decks/mine` | 내 세트 |
-| GET | `/api/decks/{id}` | 세트 + 카드 |
-| POST | `/api/decks/import` | xlsx → 내 세트 |
-| PUT | `/api/decks/{id}/name` | 내 세트 이름 변경 |
-| PUT | `/api/decks/{id}/import` | 내 세트 카드 엑셀 교체 |
-| POST/PUT/DELETE | `/api/decks/{id}/cards[/{cardId}]` | 카드 CRUD |
-| DELETE | `/api/decks/{id}` | 내 세트 삭제 |
-| GET/PUT/DELETE | `/api/decks/{id}/progress` | 진행도 |
-
-배포 시 `SPRING_PROFILES_ACTIVE=prod` 와 고유 `JWT_SECRET` 을 설정하세요. nginx는 `/api`만 프록시하며 actuator는 공개하지 않습니다.
+배포 시 `SPRING_PROFILES_ACTIVE=prod` 와 고유 `JWT_SECRET`·SMTP 환경변수를 설정하세요. nginx는 `/api`만 프록시하며 actuator는 공개하지 않습니다.

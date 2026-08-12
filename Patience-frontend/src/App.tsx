@@ -51,7 +51,7 @@ export default function App() {
           </Protected>
         }
       />
-      <Route path="*" element={<ErrorPage kind="not-found" />} />
+      <Route path="*" element={<ErrorPage />} />
     </Routes>
   );
 }

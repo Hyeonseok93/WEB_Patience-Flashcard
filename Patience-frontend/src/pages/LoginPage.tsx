@@ -8,11 +8,18 @@ import AuthStage from "../components/AuthStage";
 type LoginLocationState = { notice?: string };
 
 export default function LoginPage() {
-  const { user, setUser } = useAuth();
+  const { user, loading, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const notice = (location.state as LoginLocationState | null)?.notice;
 
+  if (loading) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-[var(--cream)] text-sm text-[var(--ink)]/50">
+        확인 중…
+      </div>
+    );
+  }
   if (user) return <Navigate to="/" replace />;
 
   return (

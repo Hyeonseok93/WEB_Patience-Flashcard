@@ -73,6 +73,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
       if (user.isEmpty()) {
         return Optional.empty();
       }
+      Integer tokenSv = claims.get("sv", Integer.class);
+      int sessionVersion = tokenSv == null ? 0 : tokenSv;
+      if (sessionVersion != user.get().getSessionVersion()) {
+        return Optional.empty();
+      }
       UserPrincipal principal = new UserPrincipal(user.get());
       return Optional.of(
           new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));

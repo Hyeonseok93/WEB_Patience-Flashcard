@@ -6,6 +6,7 @@ CREATE TABLE users (
     email           VARCHAR(254) NOT NULL UNIQUE
                     CHECK (email = LOWER(email)),
     email_verified_at TIMESTAMPTZ NOT NULL,
+    session_version INT          NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
@@ -22,6 +23,15 @@ CREATE TABLE email_challenges (
 );
 
 CREATE INDEX ix_email_challenges_email_purpose ON email_challenges (email, purpose);
+
+CREATE TABLE rate_limit_events (
+    id          BIGSERIAL PRIMARY KEY,
+    bucket_key  VARCHAR(191) NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_rate_limit_events_bucket_created
+    ON rate_limit_events (bucket_key, created_at);
 
 CREATE TABLE decks (
     id              BIGSERIAL PRIMARY KEY,

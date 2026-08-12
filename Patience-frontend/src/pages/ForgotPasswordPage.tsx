@@ -11,7 +11,7 @@ import { fieldClass } from "../lib/fieldClass";
 import { messageOf } from "../lib/errors";
 
 export default function ForgotPasswordPage() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -25,6 +25,13 @@ export default function ForgotPasswordPage() {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  if (loading) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-[var(--cream)] text-sm text-[var(--ink)]/50">
+        확인 중…
+      </div>
+    );
+  }
   if (user) return <Navigate to="/" replace />;
 
   const emailOk = !emailInvalidReason(normalizeEmail(email));

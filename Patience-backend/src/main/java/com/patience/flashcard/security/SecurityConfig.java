@@ -49,7 +49,8 @@ public class SecurityConfig {
                         "/api/auth/email-challenge",
                         "/api/auth/email-confirm",
                         "/api/auth/forgot-password",
-                        "/api/auth/reset-password")
+                        "/api/auth/reset-password",
+                        "/api/auth/logout")
                     .permitAll()
                     .requestMatchers(HttpMethod.OPTIONS, "/**")
                     .permitAll()

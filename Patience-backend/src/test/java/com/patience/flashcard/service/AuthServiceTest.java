@@ -13,6 +13,7 @@ import com.patience.flashcard.domain.UserAccount;
 import com.patience.flashcard.repository.EmailChallengeRepository;
 import com.patience.flashcard.repository.UserAccountRepository;
 import com.patience.flashcard.security.JwtService;
+import com.patience.flashcard.security.UserPrincipal;
 import com.patience.flashcard.web.ApiException;
 import com.patience.flashcard.web.dto.LoginRequest;
 import com.patience.flashcard.web.dto.SignupRequest;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -38,11 +40,7 @@ class AuthServiceTest {
   @Mock EmailChallengeRepository challenges;
   @Mock PasswordEncoder passwordEncoder;
   @Mock JwtService jwtService;
-  @Mock SignupRateLimiter signupRateLimiter;
-  @Mock LoginRateLimiter loginRateLimiter;
-  @Mock VerificationRateLimiter verificationRateLimiter;
-  @Mock ConfirmRateLimiter confirmRateLimiter;
-  @Mock LookupRateLimiter lookupRateLimiter;
+  @Mock RateLimiter rateLimiter;
   @Mock MailService mailService;
   @Mock HttpServletRequest httpRequest;
   @Mock HttpServletResponse response;
@@ -57,11 +55,7 @@ class AuthServiceTest {
             challenges,
             passwordEncoder,
             jwtService,
-            signupRateLimiter,
-            loginRateLimiter,
-            verificationRateLimiter,
-            confirmRateLimiter,
-            lookupRateLimiter,
+            rateLimiter,
             mailService);
   }
 
@@ -82,22 +76,21 @@ class AuthServiceTest {
   }
 
   @Test
-  void emailAvailableDoesNotRevealTaken() {
+  void emailAvailableIsFormatOnlyAndDoesNotRevealTaken() {
     var result = authService.emailAvailable("A@B.CO", "127.0.0.1");
     assertThat(result.available()).isTrue();
-    assertThat(result.message()).isEqualTo("쓸 수 있어요");
+    assertThat(result.email()).isEqualTo("a@b.co");
+    assertThat(result.message()).isNull();
     verify(userRepository, never()).existsByEmailIgnoreCase(any());
   }
 
   @Test
-  void requestEmailCodeRejectsExistingEmail() {
+  void requestEmailCodeDoesNotRevealExistingEmail() {
     when(userRepository.existsByEmailIgnoreCase("a@b.co")).thenReturn(true);
-    assertThatThrownBy(() -> authService.requestEmailCode("A@B.CO", "127.0.0.1"))
-        .isInstanceOf(ApiException.class)
-        .hasMessageContaining("이미 존재하는 이메일")
-        .extracting(ex -> ((ApiException) ex).getStatus())
-        .isEqualTo(HttpStatus.CONFLICT);
+    var result = authService.requestEmailCode("A@B.CO", "127.0.0.1");
+    assertThat(result.message()).isEqualTo("인증 번호를 보냈어요.");
     verify(mailService, never()).sendSignupCode(any(), any());
+    verify(challenges).save(any(EmailChallenge.class));
   }
 
   @Test
@@ -119,7 +112,7 @@ class AuthServiceTest {
     when(jwtService.cookieName()).thenReturn("PATIENCE_TOKEN");
     when(jwtService.cookieSecure()).thenReturn(false);
     when(jwtService.expirationMs()).thenReturn(86_400_000L);
-    when(jwtService.createToken(9L, "hyunm")).thenReturn("token");
+    when(jwtService.createToken(9L, "hyunm", 0)).thenReturn("token");
 
     var created =
         authService.signup(
@@ -132,7 +125,7 @@ class AuthServiceTest {
     assertThat(created.email()).isEqualTo("a@b.co");
     assertThat(proof.getConsumedAt()).isNotNull();
     verify(mailService, never()).sendSignupCode(any(), any());
-    verify(signupRateLimiter).assertAllowed("127.0.0.1");
+    verify(rateLimiter).assertAllowed(RateLimiter.Action.SIGNUP, "127.0.0.1");
   }
 
   @Test
@@ -151,8 +144,7 @@ class AuthServiceTest {
   }
 
   @Test
-  void signupRejectsDuplicateEmail() {
-    when(userRepository.existsByEmailIgnoreCase("a@b.co")).thenReturn(true);
+  void signupWithoutProofDoesNotRevealTakenEmail() {
     assertThatThrownBy(
             () ->
                 authService.signup(
@@ -161,7 +153,10 @@ class AuthServiceTest {
                     httpRequest,
                     response))
         .isInstanceOf(ApiException.class)
-        .hasMessageContaining("이미 존재하는 이메일");
+        .hasMessageContaining("메일 인증을 먼저")
+        .extracting(ex -> ((ApiException) ex).getStatus())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
+    verify(userRepository, never()).existsByEmailIgnoreCase(any());
   }
 
   @Test
@@ -192,14 +187,14 @@ class AuthServiceTest {
     when(jwtService.cookieName()).thenReturn("PATIENCE_TOKEN");
     when(jwtService.cookieSecure()).thenReturn(false);
     when(jwtService.expirationMs()).thenReturn(86_400_000L);
-    when(jwtService.createToken(1L, "hyunm")).thenReturn("token");
+    when(jwtService.createToken(1L, "hyunm", 0)).thenReturn("token");
 
     var me = authService.login(new LoginRequest("A@B.CO", "password1"), "127.0.0.1", response);
 
     assertThat(me.username()).isEqualTo("hyunm");
     assertThat(me.email()).isEqualTo("a@b.co");
     verify(userRepository, never()).findByUsernameIgnoreCase(any());
-    verify(loginRateLimiter).assertAllowed("127.0.0.1");
+    verify(rateLimiter).assertAllowed(RateLimiter.Action.LOGIN, "127.0.0.1");
   }
 
   @Test
@@ -210,7 +205,7 @@ class AuthServiceTest {
 
     assertThat(result.message()).isEqualTo("인증 번호를 보냈어요.");
     verify(mailService, never()).sendResetCode(any(), any());
-    verify(challenges, never()).save(any());
+    verify(challenges).save(any(EmailChallenge.class));
   }
 
   @Test
@@ -248,7 +243,6 @@ class AuthServiceTest {
 
   @Test
   void signupRejectsMissingProof() {
-    when(userRepository.existsByEmailIgnoreCase("a@b.co")).thenReturn(false);
     when(httpRequest.getCookies()).thenReturn(null);
     assertThatThrownBy(
             () ->
@@ -259,6 +253,35 @@ class AuthServiceTest {
                     response))
         .isInstanceOf(ApiException.class)
         .hasMessageContaining("메일 인증");
+    verify(userRepository, never()).existsByEmailIgnoreCase(any());
+  }
+
+  @Test
+  void logoutBumpsSessionVersionWhenAuthenticated() {
+    UserAccount user = new UserAccount();
+    ReflectionTestUtils.setField(user, "id", 3L);
+    user.setUsername("hyunm");
+    user.setSessionVersion(2);
+    when(userRepository.findById(3L)).thenReturn(Optional.of(user));
+    when(jwtService.cookieName()).thenReturn("PATIENCE_TOKEN");
+    when(jwtService.cookieSecure()).thenReturn(false);
+
+    var auth =
+        new UsernamePasswordAuthenticationToken(new UserPrincipal(user), null, java.util.List.of());
+    authService.logout(auth, response);
+
+    assertThat(user.getSessionVersion()).isEqualTo(3);
+    verify(userRepository).save(user);
+  }
+
+  @Test
+  void logoutWithoutAuthOnlyClearsCookie() {
+    when(jwtService.cookieName()).thenReturn("PATIENCE_TOKEN");
+    when(jwtService.cookieSecure()).thenReturn(false);
+
+    authService.logout(null, response);
+
+    verify(userRepository, never()).save(any());
   }
 
   private static EmailChallenge openProof(String email) {

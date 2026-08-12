@@ -29,6 +29,10 @@ public class UserAccount {
   @Column(name = "email_verified_at", nullable = false)
   private Instant emailVerifiedAt;
 
+  /** Bumped on password reset so existing JWTs stop working. */
+  @Column(name = "session_version", nullable = false)
+  private int sessionVersion = 0;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt = Instant.now();
 
@@ -66,6 +70,14 @@ public class UserAccount {
 
   public void setEmailVerifiedAt(Instant emailVerifiedAt) {
     this.emailVerifiedAt = emailVerifiedAt;
+  }
+
+  public int getSessionVersion() {
+    return sessionVersion;
+  }
+
+  public void setSessionVersion(int sessionVersion) {
+    this.sessionVersion = sessionVersion;
   }
 
   /** 공개 후 미인증 계정 허용 시 API/가드에서 다시 쓰기. */

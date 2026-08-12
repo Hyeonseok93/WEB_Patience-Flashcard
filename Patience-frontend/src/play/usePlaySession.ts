@@ -30,7 +30,7 @@ import {
 } from "./progressCodec";
 
 export type StartMode = "shuffle" | "order";
-export type StartIntent = { mode: StartMode | null; levels: number };
+export type StartIntent = { mode: StartMode | null; levels: number; nonce: string };
 
 export function readStartIntent(): StartIntent {
   const sp = new URLSearchParams(window.location.search);
@@ -38,7 +38,8 @@ export function readStartIntent(): StartIntent {
   const levels = lv >= MIN_LEVELS && lv <= MAX_LEVELS ? lv : DEFAULT_LEVEL_COUNT;
   const mode: StartMode | null =
     sp.get("shuffle") === "1" ? "shuffle" : sp.get("order") === "1" ? "order" : null;
-  return { mode, levels };
+  const nonce = sp.get("n") ?? "";
+  return { mode, levels, nonce };
 }
 
 export function usePlaySession(deckId: number) {
@@ -59,7 +60,6 @@ export function usePlaySession(deckId: number) {
   const [forcedStackInIds, setForcedStackInIds] = useState<Set<number>>(() => new Set());
   const [mainEnterNonce, setMainEnterNonce] = useState(0);
 
-  const initRef = useRef(false);
   const saveTimer = useRef<number | null>(null);
   const applyTimer = useRef<number | null>(null);
   const prevCompleted = useRef(0);
@@ -96,12 +96,23 @@ export function usePlaySession(deckId: number) {
         setLookup(nextLookup);
 
         let next: GameSnapshot;
-        if (startIntent.mode && !initRef.current) {
-          initRef.current = true;
-          await api.resetProgress(deckId);
-          if (cancelled) return;
-          next = buildFresh(nextLookup.ids, startIntent.mode, startIntent.levels, shuffle);
-          navigate(`/play/${deckId}`, { replace: true });
+        if (startIntent.mode) {
+          const startKey = `patience.startIntent:${deckId}:${startIntent.mode}:${startIntent.levels}:${startIntent.nonce}`;
+          const alreadyStarted = startIntent.nonce !== "" && sessionStorage.getItem(startKey) === "1";
+          if (!alreadyStarted) {
+            if (startIntent.nonce) sessionStorage.setItem(startKey, "1");
+            await api.resetProgress(deckId);
+            if (cancelled) return;
+            next = buildFresh(nextLookup.ids, startIntent.mode, startIntent.levels, shuffle);
+            navigate(`/play/${deckId}`, { replace: true });
+          } else if (progress.exists) {
+            const parsed = buildFromSaved(progress, nextLookup);
+            next =
+              parsed ??
+              buildFresh(nextLookup.ids, startIntent.mode, startIntent.levels, shuffle);
+          } else {
+            next = buildFresh(nextLookup.ids, startIntent.mode, startIntent.levels, shuffle);
+          }
         } else if (progress.exists) {
           const parsed = buildFromSaved(progress, nextLookup);
           if (parsed) {
@@ -138,6 +149,7 @@ export function usePlaySession(deckId: number) {
   useEffect(() => {
     if (!snapshot) return;
     latestRef.current = snapshot;
+    if (totalRemaining(snapshot) === 0) return;
     const payload = toPayload(snapshot);
     const serialized = JSON.stringify(payload);
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
@@ -165,7 +177,7 @@ export function usePlaySession(deckId: number) {
       if (applyTimer.current) window.clearTimeout(applyTimer.current);
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
       const snap = latestRef.current;
-      if (!snap) return;
+      if (!snap || totalRemaining(snap) === 0) return;
       const payload = toPayload(snap);
       if (JSON.stringify(payload) === savedRef.current) return;
       api.saveProgressBeacon(deckId, payload);

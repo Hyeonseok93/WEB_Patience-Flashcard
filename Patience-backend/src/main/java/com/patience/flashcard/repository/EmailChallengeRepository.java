@@ -17,4 +17,9 @@ public interface EmailChallengeRepository extends JpaRepository<EmailChallenge, 
   @Query(
       "delete from EmailChallenge c where c.email = :email and c.purpose = :purpose and c.consumedAt is null")
   void deleteOpen(@Param("email") String email, @Param("purpose") String purpose);
+
+  @Modifying(clearAutomatically = true)
+  @Query(
+      "delete from EmailChallenge c where c.expiresAt < :cutoff or c.consumedAt is not null")
+  int deleteExpiredOrConsumed(@Param("cutoff") java.time.Instant cutoff);
 }

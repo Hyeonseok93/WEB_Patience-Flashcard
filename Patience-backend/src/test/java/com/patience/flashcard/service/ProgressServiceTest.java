@@ -58,9 +58,14 @@ class ProgressServiceTest {
     when(cardRepository.findIdsByDeck(deck)).thenReturn(List.of(11L, 12L, 13L));
   }
 
+  private void stubSaveLookup() {
+    when(progressRepository.findByUserAndDeck(user, deck)).thenReturn(Optional.empty());
+  }
+
   @Test
   void saveAcceptsCardIdsBelongingToDeck() {
     stubDeckCards();
+    stubSaveLookup();
     ProgressUpsertRequest request =
         new ProgressUpsertRequest("{\"1\":[11],\"2\":[12],\"3\":[]}", "[13]", 0);
 
@@ -73,6 +78,7 @@ class ProgressServiceTest {
   @Test
   void saveAcceptsFullyCompletedDeck() {
     stubDeckCards();
+    stubSaveLookup();
     ProgressUpsertRequest request =
         new ProgressUpsertRequest("{\"1\":[],\"2\":[],\"3\":[]}", "[]", 3);
 
@@ -167,6 +173,34 @@ class ProgressServiceTest {
 
     assertThat(response.exists()).isTrue();
     assertThat(response.completedCount()).isZero();
+    verify(progressRepository, never()).deleteByUserAndDeck(user, deck);
+  }
+
+  @Test
+  void getTreatsClearedDeckAsInactive() {
+    StudyProgress row = new StudyProgress();
+    row.setLevelsJson("{\"1\":[],\"2\":[],\"3\":[]}");
+    row.setQueueJson("[]");
+    row.setCompletedCount(3);
+    row.setClearCount(2);
+    when(progressRepository.findByUserAndDeck(user, deck)).thenReturn(Optional.of(row));
+
+    ProgressResponse response = progressService.get(user, 7L);
+
+    assertThat(response.exists()).isFalse();
+    assertThat(response.clearCount()).isEqualTo(2);
+  }
+
+  @Test
+  void resetKeepsClearHistoryViaStub() {
+    StudyProgress row = new StudyProgress();
+    row.setClearCount(2);
+    when(progressRepository.findByUserAndDeck(user, deck)).thenReturn(Optional.of(row));
+
+    progressService.reset(user, 7L);
+
+    verify(progressRepository)
+        .clearPlayState(anyLong(), anyLong(), anyString(), anyString(), any());
     verify(progressRepository, never()).deleteByUserAndDeck(user, deck);
   }
 

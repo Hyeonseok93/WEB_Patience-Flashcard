@@ -19,6 +19,7 @@
     "java.import.maven.enabled": false,
     "java.configuration.updateBuildConfiguration": "automatic",
     "java.project.importOnFirstTimeStartup": "automatic",
+    "java.gradle.buildServer.enabled": "off",
     "java.import.exclusions": [
       "**/Patience-frontend/**",
       "**/Patience-local/**",

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class DeckService {
   private final DeckRepository deckRepository;
   private final CardRepository cardRepository;
   private final StudyProgressRepository progressRepository;
+  private final ProgressService progressService;
   private final XlsxDeckImporter xlsxImporter;
   private final XlsxDeckExporter xlsxExporter;
   private final ObjectMapper objectMapper;
@@ -39,12 +41,14 @@ public class DeckService {
       DeckRepository deckRepository,
       CardRepository cardRepository,
       StudyProgressRepository progressRepository,
+      @Lazy ProgressService progressService,
       XlsxDeckImporter xlsxImporter,
       XlsxDeckExporter xlsxExporter,
       ObjectMapper objectMapper) {
     this.deckRepository = deckRepository;
     this.cardRepository = cardRepository;
     this.progressRepository = progressRepository;
+    this.progressService = progressService;
     this.xlsxImporter = xlsxImporter;
     this.xlsxExporter = xlsxExporter;
     this.objectMapper = objectMapper;
@@ -71,7 +75,8 @@ public class DeckService {
       if (progress.getClearCount() > 0) {
         clearsByDeck.put(deckId, progress.getClearCount());
       }
-      if (!isActiveProgress(progress)) {
+      if (!ProgressActivity.isActive(
+          objectMapper, progress.getLevelsJson(), progress.getQueueJson())) {
         continue;
       }
       Integer levels = levelCountOf(progress.getLevelsJson());
@@ -100,40 +105,6 @@ public class DeckService {
       map.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
     }
     return map;
-  }
-
-  private boolean isActiveProgress(StudyProgress progress) {
-    if (progress.getCompletedCount() > 0) {
-      return true;
-    }
-    return hasAnyIds(progress.getLevelsJson()) || hasAnyIds(progress.getQueueJson());
-  }
-
-  private boolean hasAnyIds(String json) {
-    if (json == null || json.isBlank()) {
-      return false;
-    }
-    try {
-      JsonNode node = objectMapper.readTree(json);
-      if (node == null) {
-        return false;
-      }
-      if (node.isArray()) {
-        return node.size() > 0;
-      }
-      if (node.isObject()) {
-        var fields = node.fields();
-        while (fields.hasNext()) {
-          JsonNode value = fields.next().getValue();
-          if (value != null && value.isArray() && value.size() > 0) {
-            return true;
-          }
-        }
-      }
-      return false;
-    } catch (Exception ex) {
-      return false;
-    }
   }
 
   private Integer levelCountOf(String levelsJson) {
@@ -238,7 +209,16 @@ public class DeckService {
     String name = resolveDeckName(user, newName, null, deck.getId());
     deck.setName(name);
     deck.setUpdatedAt(Instant.now());
-    return toSummary(deck, cardRepository.countByDeck(deck), null, clearCountOf(user, deck));
+    Integer studyLevels =
+        progressRepository
+            .findByUserAndDeck(user, deck)
+            .filter(
+                p ->
+                    ProgressActivity.isActive(
+                        objectMapper, p.getLevelsJson(), p.getQueueJson()))
+            .map(p -> levelCountOf(p.getLevelsJson()))
+            .orElse(null);
+    return toSummary(deck, cardRepository.countByDeck(deck), studyLevels, clearCountOf(user, deck));
   }
 
   @Transactional
@@ -250,12 +230,12 @@ public class DeckService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "유효한 카드 행이 없습니다. A열=앞면, B열=뒷면을 확인하세요.");
     }
 
-    progressRepository.deleteByUserAndDeck(user, deck);
+    progressService.clearPlayKeepHistory(user, deck);
     cardRepository.deleteByDeck(deck);
     List<Card> cards = buildCards(deck, parsed);
     cardRepository.saveAll(cards);
     deck.setUpdatedAt(Instant.now());
-    return toSummary(deck, cards.size(), null, 0);
+    return toSummary(deck, cards.size(), null, clearCountOf(user, deck));
   }
 
   @Transactional
@@ -273,7 +253,7 @@ public class DeckService {
     card.setSortOrder(cardRepository.maxSortOrder(deck) + 1);
     cardRepository.save(card);
     deck.setUpdatedAt(Instant.now());
-    progressRepository.deleteByUserAndDeck(user, deck);
+    progressService.clearPlayKeepHistory(user, deck);
     return new CardResponse(card.getId(), card.getFrontText(), card.getBackText(), card.getSortOrder());
   }
 
@@ -305,7 +285,7 @@ public class DeckService {
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다."));
     cardRepository.delete(card);
     deck.setUpdatedAt(Instant.now());
-    progressRepository.deleteByUserAndDeck(user, deck);
+    progressService.clearPlayKeepHistory(user, deck);
   }
 
   @Transactional

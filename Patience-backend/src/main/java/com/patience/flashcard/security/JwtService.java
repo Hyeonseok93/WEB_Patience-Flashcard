@@ -34,12 +34,13 @@ public class JwtService {
     this.key = Keys.hmacShaKeyFor(secretBytes);
   }
 
-  public String createToken(Long userId, String username) {
+  public String createToken(Long userId, String username, int sessionVersion) {
     Date now = new Date();
     Date exp = new Date(now.getTime() + properties.expirationMs());
     return Jwts.builder()
         .subject(String.valueOf(userId))
         .claim("username", username)
+        .claim("sv", sessionVersion)
         .issuedAt(now)
         .expiration(exp)
         .signWith(key)

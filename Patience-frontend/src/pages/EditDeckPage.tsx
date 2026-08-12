@@ -75,7 +75,7 @@ export default function EditDeckPage() {
     if (!file) return;
     const ok = await confirm({
       title: "엑셀로 카드를 바꿀까요?",
-      message: "기존 카드와 진행도가 모두 지워지고 새 파일로 교체됩니다.",
+      message: "기존 카드와 학습 진행이 초기화되고 새 파일로 교체됩니다. 클리어 횟수는 남아요.",
       confirmLabel: "교체하기",
       cancelLabel: "취소",
       danger: true,
@@ -108,7 +108,7 @@ export default function EditDeckPage() {
       setDeck((prev) => (prev ? { ...prev, cards: [...prev.cards, created] } : prev));
       setFront("");
       setBack("");
-      toast.success("카드를 추가했어요 · 진행도는 초기화됩니다");
+      toast.success("카드를 추가했어요 · 학습 진행은 초기화됩니다");
     } catch (err) {
       toast.error(messageOf(err, "카드 추가에 실패했습니다."));
     } finally {
@@ -141,7 +141,7 @@ export default function EditDeckPage() {
   async function onDeleteCard(card: CardItem) {
     const ok = await confirm({
       title: "이 카드를 삭제할까요?",
-      message: "진행도도 함께 초기화됩니다.",
+      message: "학습 진행도 함께 초기화됩니다. 클리어 횟수는 남아요.",
       confirmLabel: "삭제",
       cancelLabel: "취소",
       danger: true,
@@ -216,7 +216,7 @@ export default function EditDeckPage() {
         <section className="rounded-3xl border border-dashed border-[var(--leaf)]/35 bg-white/55 p-6">
           <h2 className="text-sm font-semibold">엑셀로 카드 교체</h2>
           <p className="mt-1.5 text-sm text-[var(--ink)]/50">
-            A열 앞면 · B열 뒷면. 셀 안 Alt+Enter 줄바꿈도 그대로 들어옵니다. 기존 카드와 진행도가 초기화됩니다.
+            A열 앞면 · B열 뒷면. 셀 안 Alt+Enter 줄바꿈도 그대로 들어옵니다. 기존 카드와 학습 진행이 초기화됩니다(클리어 횟수는 유지).
           </p>
           <input
             ref={replaceRef}

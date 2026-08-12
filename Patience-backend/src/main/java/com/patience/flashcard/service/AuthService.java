@@ -36,16 +36,15 @@ public class AuthService {
   static final String EMAIL_PROOF_COOKIE = "PATIENCE_EMAIL_PROOF";
   static final int MAX_CONFIRM_FAILURES = 5;
   private static final Duration CODE_TTL = Duration.ofMinutes(10);
+  /** Fixed bcrypt so missing-user logins pay the same cost as wrong-password. */
+  private static final String DUMMY_PASSWORD_HASH =
+      "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
   private final UserAccountRepository userRepository;
   private final EmailChallengeRepository challenges;
   private final PasswordEncoder passwordEncoder;
   private final JwtService jwtService;
-  private final SignupRateLimiter signupRateLimiter;
-  private final LoginRateLimiter loginRateLimiter;
-  private final VerificationRateLimiter verificationRateLimiter;
-  private final ConfirmRateLimiter confirmRateLimiter;
-  private final LookupRateLimiter lookupRateLimiter;
+  private final RateLimiter rateLimiter;
   private final MailService mailService;
 
   public AuthService(
@@ -53,27 +52,19 @@ public class AuthService {
       EmailChallengeRepository challenges,
       PasswordEncoder passwordEncoder,
       JwtService jwtService,
-      SignupRateLimiter signupRateLimiter,
-      LoginRateLimiter loginRateLimiter,
-      VerificationRateLimiter verificationRateLimiter,
-      ConfirmRateLimiter confirmRateLimiter,
-      LookupRateLimiter lookupRateLimiter,
+      RateLimiter rateLimiter,
       MailService mailService) {
     this.userRepository = userRepository;
     this.challenges = challenges;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
-    this.signupRateLimiter = signupRateLimiter;
-    this.loginRateLimiter = loginRateLimiter;
-    this.verificationRateLimiter = verificationRateLimiter;
-    this.confirmRateLimiter = confirmRateLimiter;
-    this.lookupRateLimiter = lookupRateLimiter;
+    this.rateLimiter = rateLimiter;
     this.mailService = mailService;
   }
 
   @Transactional(readOnly = true)
   public UsernameAvailableResponse usernameAvailable(String raw, String clientIp) {
-    lookupRateLimiter.assertAllowed(clientIp);
+    rateLimiter.assertAllowed(RateLimiter.Action.LOOKUP, clientIp);
     String username = UsernameRules.normalize(raw);
     String invalid = UsernameRules.invalidReason(username);
     if (invalid != null) {
@@ -87,31 +78,40 @@ public class AuthService {
 
   @Transactional(readOnly = true)
   public EmailAvailableResponse emailAvailable(String raw, String clientIp) {
-    lookupRateLimiter.assertAllowed(clientIp);
+    rateLimiter.assertAllowed(RateLimiter.Action.LOOKUP, clientIp);
     String email = EmailRules.normalize(raw);
     String invalid = EmailRules.invalidReason(email);
     if (invalid != null) {
       return new EmailAvailableResponse(email, false, invalid);
     }
-    return new EmailAvailableResponse(email, true, "쓸 수 있어요");
+    // Format only — do not query users (email enumeration).
+    return new EmailAvailableResponse(email, true, null);
   }
 
   @Transactional
   public MessageResponse requestEmailCode(String rawEmail, String clientIp) {
-    String email = requireFreshEmail(rawEmail);
-    verificationRateLimiter.assertAllowed(clientIp + ":" + email);
+    String email = EmailRules.normalize(rawEmail);
+    String invalid = EmailRules.invalidReason(email);
+    if (invalid != null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
+    }
+    rateLimiter.assertAllowed(RateLimiter.Action.VERIFICATION, clientIp);
+    boolean taken = userRepository.existsByEmailIgnoreCase(email);
     challenges.deleteOpen(email, EmailChallenge.PURPOSE_SIGNUP);
-    String code = TokenHasher.sixDigits();
-    EmailChallenge row = new EmailChallenge();
-    row.setEmail(email);
-    row.setPurpose(EmailChallenge.PURPOSE_SIGNUP);
-    row.setCodeHash(TokenHasher.codeHash(email, code));
-    row.setExpiresAt(Instant.now().plus(CODE_TTL));
-    challenges.save(row);
-    try {
-      mailService.sendSignupCode(email, code);
-    } catch (Exception ex) {
-      throw new ApiException(HttpStatus.BAD_GATEWAY, "인증 메일을 보내지 못했어요. 잠시 후 다시 해 주세요.");
+    // Always persist a challenge so confirm errors match (no “먼저 인증하기” oracle).
+    EmailChallenge row = newChallenge(email, EmailChallenge.PURPOSE_SIGNUP);
+    if (taken) {
+      row.setCodeHash(unreachableCodeHash());
+      challenges.save(row);
+    } else {
+      String code = TokenHasher.sixDigits();
+      row.setCodeHash(TokenHasher.codeHash(email, code));
+      challenges.save(row);
+      try {
+        mailService.sendSignupCode(email, code);
+      } catch (Exception ex) {
+        // Same body as taken/success — SMTP failure must not probe registration.
+      }
     }
     return new MessageResponse("인증 번호를 보냈어요.");
   }
@@ -127,7 +127,7 @@ public class AuthService {
     if (code == null || !code.matches("^\\d{6}$")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호 6자리를 입력해 주세요.");
     }
-    confirmRateLimiter.assertAllowed(clientIp + ":" + email);
+    rateLimiter.assertAllowed(RateLimiter.Action.CONFIRM, clientIp + ":" + email);
     EmailChallenge row =
         challenges
             .findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
@@ -146,8 +146,11 @@ public class AuthService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 달라요.");
     }
     String proof = TokenHasher.newRawToken();
+    Instant proofExpires = Instant.now().plus(CODE_TTL);
     row.setConfirmedAt(Instant.now());
+    row.setExpiresAt(proofExpires);
     row.setProofHash(TokenHasher.sha256(proof));
+    row.setFailedAttempts(0);
     writeCookie(response, EMAIL_PROOF_COOKIE, proof, CODE_TTL.toSeconds());
     return new MessageResponse("인증 완료");
   }
@@ -158,13 +161,18 @@ public class AuthService {
       String clientIp,
       HttpServletRequest httpRequest,
       HttpServletResponse response) {
-    signupRateLimiter.assertAllowed(clientIp);
+    rateLimiter.assertAllowed(RateLimiter.Action.SIGNUP, clientIp);
     String username = UsernameRules.normalize(request.username());
     String invalidName = UsernameRules.invalidReason(username);
     if (invalidName != null) {
       throw new ApiException(HttpStatus.BAD_REQUEST, invalidName);
     }
-    String email = requireFreshEmail(request.email());
+    String email = EmailRules.normalize(request.email());
+    String invalidEmail = EmailRules.invalidReason(email);
+    if (invalidEmail != null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, invalidEmail);
+    }
+    // Proof before existence check — otherwise 409 vs 400 oracles registration.
     String rawProof = cookieValue(httpRequest, EMAIL_PROOF_COOKIE);
     if (rawProof == null || rawProof.isBlank()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "메일 인증을 먼저 해 주세요.");
@@ -178,6 +186,9 @@ public class AuthService {
     }
     if (proof.getExpiresAt().isBefore(Instant.now())) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "인증이 만료됐어요. 다시 해 주세요.");
+    }
+    if (userRepository.existsByEmailIgnoreCase(email)) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "메일 인증을 다시 해 주세요.");
     }
     if (userRepository.existsByUsernameIgnoreCase(username)) {
       throw new ApiException(HttpStatus.CONFLICT, "이미 있는 닉네임이에요");
@@ -200,19 +211,19 @@ public class AuthService {
 
   @Transactional(readOnly = true)
   public UserResponse login(LoginRequest request, String clientIp, HttpServletResponse response) {
-    loginRateLimiter.assertAllowed(clientIp);
+    rateLimiter.assertAllowed(RateLimiter.Action.LOGIN, clientIp);
     String email = EmailRules.normalize(request.email());
     String invalid = EmailRules.invalidReason(email);
     if (invalid != null) {
       throw new BadCredentialsException("bad credentials");
     }
-    UserAccount user =
-        userRepository
-            .findByEmailIgnoreCase(email)
-            .orElseThrow(() -> new BadCredentialsException("bad credentials"));
-    if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+    Optional<UserAccount> found = userRepository.findByEmailIgnoreCase(email);
+    // Always run bcrypt so missing emails are not faster than wrong passwords.
+    String hash = found.map(UserAccount::getPasswordHash).orElse(DUMMY_PASSWORD_HASH);
+    if (!passwordEncoder.matches(request.password(), hash) || found.isEmpty()) {
       throw new BadCredentialsException("bad credentials");
     }
+    UserAccount user = found.get();
     writeAuthCookie(response, user);
     return toResponse(user);
   }
@@ -224,22 +235,22 @@ public class AuthService {
     if (invalid != null) {
       throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
     }
-    verificationRateLimiter.assertAllowed(clientIp + ":reset:" + email);
+    rateLimiter.assertAllowed(RateLimiter.Action.VERIFICATION, clientIp);
     Optional<UserAccount> user = userRepository.findByEmailIgnoreCase(email);
+    challenges.deleteOpen(email, EmailChallenge.PURPOSE_RESET);
+    EmailChallenge row = newChallenge(email, EmailChallenge.PURPOSE_RESET);
     if (user.isPresent()) {
-      challenges.deleteOpen(email, EmailChallenge.PURPOSE_RESET);
       String code = TokenHasher.sixDigits();
-      EmailChallenge row = new EmailChallenge();
-      row.setEmail(email);
-      row.setPurpose(EmailChallenge.PURPOSE_RESET);
       row.setCodeHash(TokenHasher.codeHash(email, code));
-      row.setExpiresAt(Instant.now().plus(CODE_TTL));
       challenges.save(row);
       try {
         mailService.sendResetCode(email, code);
       } catch (Exception ex) {
-        throw new ApiException(HttpStatus.BAD_GATEWAY, "인증 메일을 보내지 못했어요. 잠시 후 다시 해 주세요.");
+        // Same body as success so a broken mailbox cannot probe account existence.
       }
+    } else {
+      row.setCodeHash(unreachableCodeHash());
+      challenges.save(row);
     }
     return new MessageResponse("인증 번호를 보냈어요.");
   }
@@ -254,7 +265,7 @@ public class AuthService {
     if (code == null || !code.matches("^\\d{6}$")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호 6자리를 입력해 주세요.");
     }
-    confirmRateLimiter.assertAllowed(clientIp + ":reset:" + email);
+    rateLimiter.assertAllowed(RateLimiter.Action.CONFIRM, clientIp + ":reset:" + email);
     EmailChallenge row =
         challenges
             .findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
@@ -277,21 +288,24 @@ public class AuthService {
             .findByEmailIgnoreCase(email)
             .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "메일 인증을 다시 해 주세요."));
     user.setPasswordHash(passwordEncoder.encode(newPassword));
+    user.setSessionVersion(user.getSessionVersion() + 1);
     row.setConfirmedAt(Instant.now());
     row.setConsumedAt(Instant.now());
     return new MessageResponse("비밀번호를 바꿨어요. 다시 로그인해 주세요.");
   }
 
-  public void logout(HttpServletResponse response) {
-    ResponseCookie cookie =
-        ResponseCookie.from(jwtService.cookieName(), "")
-            .httpOnly(true)
-            .secure(jwtService.cookieSecure())
-            .path("/")
-            .sameSite("Lax")
-            .maxAge(0)
-            .build();
-    response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+  @Transactional
+  public void logout(Authentication authentication, HttpServletResponse response) {
+    if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
+      userRepository
+          .findById(principal.getId())
+          .ifPresent(
+              user -> {
+                user.setSessionVersion(user.getSessionVersion() + 1);
+                userRepository.save(user);
+              });
+    }
+    clearAuthCookie(response);
   }
 
   @Transactional(readOnly = true)
@@ -309,16 +323,17 @@ public class AuthService {
     return userRepository.getReferenceById(principal.getId());
   }
 
-  private String requireFreshEmail(String raw) {
-    String email = EmailRules.normalize(raw);
-    String invalid = EmailRules.invalidReason(email);
-    if (invalid != null) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
-    }
-    if (userRepository.existsByEmailIgnoreCase(email)) {
-      throw new ApiException(HttpStatus.CONFLICT, "이미 존재하는 이메일");
-    }
-    return email;
+  private EmailChallenge newChallenge(String email, String purpose) {
+    EmailChallenge row = new EmailChallenge();
+    row.setEmail(email);
+    row.setPurpose(purpose);
+    row.setExpiresAt(Instant.now().plus(CODE_TTL));
+    return row;
+  }
+
+  /** Hash that no 6-digit OTP can match — used for decoy challenges. */
+  private static String unreachableCodeHash() {
+    return TokenHasher.sha256(TokenHasher.newRawToken());
   }
 
   private UserPrincipal requirePrincipal(Authentication authentication) {
@@ -329,8 +344,13 @@ public class AuthService {
   }
 
   private void writeAuthCookie(HttpServletResponse response, UserAccount user) {
-    String token = jwtService.createToken(user.getId(), user.getUsername());
+    String token =
+        jwtService.createToken(user.getId(), user.getUsername(), user.getSessionVersion());
     writeCookie(response, jwtService.cookieName(), token, jwtService.expirationMs() / 1000);
+  }
+
+  private void clearAuthCookie(HttpServletResponse response) {
+    writeCookie(response, jwtService.cookieName(), "", 0);
   }
 
   private void writeCookie(HttpServletResponse response, String name, String value, long maxAgeSeconds) {
@@ -371,7 +391,8 @@ public class AuthService {
     String msg =
         String.valueOf(ex.getMostSpecificCause().getMessage()).toLowerCase(Locale.ROOT);
     if (msg.contains("email")) {
-      return new ApiException(HttpStatus.CONFLICT, "이미 존재하는 이메일");
+      // Race after proof — do not say the address is taken.
+      return new ApiException(HttpStatus.BAD_REQUEST, "메일 인증을 다시 해 주세요.");
     }
     return new ApiException(HttpStatus.CONFLICT, "이미 있는 닉네임이에요");
   }

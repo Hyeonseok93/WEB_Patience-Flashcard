@@ -73,12 +73,8 @@ export function SignupForm() {
       setCode("");
       setCodeNote(result.message);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        mail.setOk(false);
-        mail.setNote("이미 존재하는 이메일");
-      } else {
-        setFormError(messageOf(err, "인증 번호를 보내지 못했어요. 다시 해 주세요."));
-      }
+      // Challenge no longer returns 409 for taken emails (enumeration-safe).
+      setFormError(messageOf(err, "인증 번호를 보내지 못했어요. 다시 해 주세요."));
     } finally {
       setChallengePending(false);
     }
@@ -112,15 +108,8 @@ export function SignupForm() {
       navigate("/", { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        if (err.message.includes("이메일")) {
-          mail.setOk(false);
-          mail.setNote("이미 존재하는 이메일");
-          setVerified(false);
-          setChallengeSent(false);
-        } else {
-          nick.setOk(false);
-          nick.setNote("이미 있는 닉네임이에요");
-        }
+        nick.setOk(false);
+        nick.setNote("이미 있는 닉네임이에요");
       } else if (err instanceof ApiError && err.status === 429) {
         setFormError(err.message);
       } else {

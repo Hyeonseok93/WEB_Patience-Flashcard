@@ -19,19 +19,24 @@ public interface StudyProgressRepository extends JpaRepository<StudyProgress, Lo
   void deleteByUserAndDeck(UserAccount user, Deck deck);
 
   /**
-   * Atomic insert-or-update keyed on the (user_id, deck_id) unique constraint. Avoids the
-   * find-then-save race that surfaced as a 500 when two writes landed at the same time.
+   * Atomic insert-or-update. {@code clear_count} increments in SQL when completed_count first
+   * reaches {@code deckSize}, so concurrent victory saves cannot double-count.
    */
   @Modifying
   @Query(
       value =
           "INSERT INTO study_progress (user_id, deck_id, levels_json, queue_json, completed_count, clear_count, updated_at) "
-              + "VALUES (:userId, :deckId, cast(:levelsJson AS jsonb), cast(:queueJson AS jsonb), :completedCount, :clearCount, :updatedAt) "
+              + "VALUES (:userId, :deckId, cast(:levelsJson AS jsonb), cast(:queueJson AS jsonb), :completedCount, "
+              + "CASE WHEN :deckSize > 0 AND :completedCount = :deckSize THEN 1 ELSE 0 END, :updatedAt) "
               + "ON CONFLICT (user_id, deck_id) DO UPDATE SET "
               + "levels_json = EXCLUDED.levels_json, "
               + "queue_json = EXCLUDED.queue_json, "
+              + "clear_count = CASE "
+              + "  WHEN :deckSize > 0 AND EXCLUDED.completed_count = :deckSize "
+              + "       AND study_progress.completed_count < :deckSize "
+              + "  THEN study_progress.clear_count + 1 "
+              + "  ELSE study_progress.clear_count END, "
               + "completed_count = EXCLUDED.completed_count, "
-              + "clear_count = EXCLUDED.clear_count, "
               + "updated_at = EXCLUDED.updated_at",
       nativeQuery = true)
   void upsert(
@@ -40,7 +45,7 @@ public interface StudyProgressRepository extends JpaRepository<StudyProgress, Lo
       @Param("levelsJson") String levelsJson,
       @Param("queueJson") String queueJson,
       @Param("completedCount") int completedCount,
-      @Param("clearCount") int clearCount,
+      @Param("deckSize") int deckSize,
       @Param("updatedAt") Instant updatedAt);
 
   /**

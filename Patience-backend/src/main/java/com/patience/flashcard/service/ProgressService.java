@@ -20,8 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ProgressService {
 
-  private static final String EMPTY_LEVELS = "{\"1\":[],\"2\":[],\"3\":[]}";
-  private static final String EMPTY_QUEUE = "[]";
+  static final String EMPTY_LEVELS = "{\"1\":[],\"2\":[],\"3\":[]}";
+  static final String EMPTY_QUEUE = "[]";
 
   private final StudyProgressRepository progressRepository;
   private final CardRepository cardRepository;
@@ -41,8 +41,8 @@ public class ProgressService {
 
   /**
    * Read-only load. Invalid rows are returned as-is ({@code exists=true}) so the client can warn
-   * and reset; GET never mutates stored progress. Inactive stubs (clear history only) report
-   * {@code exists=false}.
+   * and reset; GET never mutates stored progress. Clear-history-only stubs report {@code
+   * exists=false}.
    */
   @Transactional(readOnly = true)
   public ProgressResponse get(UserAccount user, Long deckId) {
@@ -57,7 +57,8 @@ public class ProgressService {
                     p.getQueueJson(),
                     p.getCompletedCount(),
                     p.getClearCount(),
-                    isActiveProgress(p)))
+                    ProgressActivity.isActive(
+                        objectMapper, p.getLevelsJson(), p.getQueueJson())))
         .orElseGet(
             () -> new ProgressResponse(deckId, EMPTY_LEVELS, EMPTY_QUEUE, 0, 0, false));
   }
@@ -67,34 +68,39 @@ public class ProgressService {
     Deck deck = deckService.requireAccessible(deckId, user);
     requireValidProgress(deck, request.levelsJson(), request.queueJson(), request.completedCount());
     int deckSize = cardRepository.findIdsByDeck(deck).size();
-    var existing = progressRepository.findByUserAndDeck(user, deck);
-    int prevCompleted = existing.map(StudyProgress::getCompletedCount).orElse(0);
-    int clearCount = existing.map(StudyProgress::getClearCount).orElse(0);
-    if (deckSize > 0
-        && request.completedCount() == deckSize
-        && prevCompleted < deckSize) {
-      clearCount += 1;
-    }
     progressRepository.upsert(
         user.getId(),
         deck.getId(),
         request.levelsJson(),
         request.queueJson(),
         request.completedCount(),
-        clearCount,
+        deckSize,
         Instant.now());
+    int clearCount =
+        progressRepository
+            .findByUserAndDeck(user, deck)
+            .map(StudyProgress::getClearCount)
+            .orElse(0);
+    boolean active =
+        ProgressActivity.isActive(objectMapper, request.levelsJson(), request.queueJson());
     return new ProgressResponse(
         deckId,
         request.levelsJson(),
         request.queueJson(),
         request.completedCount(),
         clearCount,
-        true);
+        active);
   }
 
   @Transactional
   public void reset(UserAccount user, Long deckId) {
     Deck deck = deckService.requireAccessible(deckId, user);
+    clearPlayKeepHistory(user, deck);
+  }
+
+  /** Drop in-play state; keep clear_count when present. Used by reset and deck card mutations. */
+  @Transactional
+  public void clearPlayKeepHistory(UserAccount user, Deck deck) {
     progressRepository
         .findByUserAndDeck(user, deck)
         .ifPresent(
@@ -108,44 +114,6 @@ public class ProgressService {
             });
   }
 
-  private boolean isActiveProgress(StudyProgress progress) {
-    if (progress.getCompletedCount() > 0) {
-      return true;
-    }
-    return hasAnyIds(progress.getLevelsJson()) || hasAnyIds(progress.getQueueJson());
-  }
-
-  private boolean hasAnyIds(String json) {
-    if (json == null || json.isBlank()) {
-      return false;
-    }
-    try {
-      JsonNode node = objectMapper.readTree(json);
-      if (node == null) {
-        return false;
-      }
-      if (node.isArray()) {
-        return node.size() > 0;
-      }
-      if (node.isObject()) {
-        var fields = node.fields();
-        while (fields.hasNext()) {
-          JsonNode value = fields.next().getValue();
-          if (value != null && value.isArray() && value.size() > 0) {
-            return true;
-          }
-        }
-      }
-      return false;
-    } catch (Exception ex) {
-      return false;
-    }
-  }
-
-  /**
-   * Enforces engine-aligned invariants: level count 2–4, per-level capacities (3/5/7), card ids
-   * belonging to the deck with no duplicates, and {@code completedCount + inPlay == deckSize}.
-   */
   private void requireValidProgress(
       Deck deck, String levelsJson, String queueJson, int completedCount) {
     JsonNode levels = readJson(levelsJson);

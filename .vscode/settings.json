@@ -1,10 +1,10 @@
 {
   "java.import.gradle.enabled": true,
-  "java.import.gradle.wrapper.enabled": false,
-  "java.import.gradle.version": "8.12.1",
+  "java.import.gradle.wrapper.enabled": true,
   "java.import.maven.enabled": false,
   "java.configuration.updateBuildConfiguration": "automatic",
   "java.project.importOnFirstTimeStartup": "automatic",
+  "java.gradle.buildServer.enabled": "off",
   "gradle.nestedProjects": true,
   "java.import.exclusions": [
     "**/Patience-frontend/**",

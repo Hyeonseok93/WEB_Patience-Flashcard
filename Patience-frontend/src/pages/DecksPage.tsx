@@ -194,7 +194,7 @@ export default function DecksPage() {
       return;
     }
     const key = pickerMode === "shuffle" ? "shuffle" : "order";
-    navigate(`/play/${selectedId}?${key}=1&levels=${levels}`);
+    navigate(`/play/${selectedId}?${key}=1&levels=${levels}&n=${Date.now()}`);
     setPickerMode(null);
   }
 
