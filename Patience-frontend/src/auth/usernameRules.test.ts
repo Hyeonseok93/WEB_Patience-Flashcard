@@ -11,6 +11,7 @@ describe("usernameRules", () => {
     expect(usernameInvalidReason("admin")).toMatch(/쓸 수 없어요/);
     expect(usernameInvalidReason("안녕")).toMatch(/영문/);
     expect(usernameInvalidReason("ok_user")).toMatch(/숫자만/);
+    expect(usernameInvalidReason("abcdefghijk")).toMatch(/10자/);
     expect(usernameInvalidReason("okuser")).toBeNull();
   });
 });

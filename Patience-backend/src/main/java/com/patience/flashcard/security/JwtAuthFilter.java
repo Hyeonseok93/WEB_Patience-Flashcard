@@ -11,7 +11,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Optional;
-import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -57,10 +56,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         return fromCookie;
       }
     }
-    String header = request.getHeader(HttpHeaders.AUTHORIZATION);
-    if (header != null && header.startsWith("Bearer ")) {
-      return Optional.of(header.substring(7));
-    }
+    // 공개 서비스: 모바일/외부 API용 Bearer가 필요하면 아래를 다시 켜기.
+    // 지금은 쿠키만 씀. CSRF 끈 상태에서 Bearer를 열어 두면 공격면이 늘어남.
+    // String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+    // if (header != null && header.startsWith("Bearer ")) {
+    //   return Optional.of(header.substring(7));
+    // }
     return Optional.empty();
   }
 

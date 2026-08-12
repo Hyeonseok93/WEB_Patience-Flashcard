@@ -1,3 +1,10 @@
+# 로컬 개발용. 공개 서비스로 올릴 때:
+# - SPRING_PROFILES_ACTIVE=prod
+# - JWT_SECRET / POSTGRES_PASSWORD 고유 값
+# - JWT_COOKIE_SECURE=true (HTTPS)
+# - Mailhog 서비스 제거, 실제 SMTP
+# - frontend 80 대신 443 + TLS
+# - 5432/8080/8025 호스트 포트는 열지 않기
 services:
   db:
     image: postgres:15-alpine
@@ -6,7 +13,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-patience}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-patience-local-change-me}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -26,11 +33,23 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-patience-local-change-me}
       JWT_SECRET: ${JWT_SECRET:-patience-local-jwt-secret-change-me-32b}
       JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
+      SPRING_MAIL_HOST: mailhog
+      SPRING_MAIL_PORT: "1025"
+      APP_MAIL_FROM: Patience <patience@localhost>
+      # APP_PUBLIC_BASE_URL: https://your-domain
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       db:
         condition: service_healthy
+      mailhog:
+        condition: service_started
+
+  # 로컬 인증 메일 확인용. 공개 서비스에서는 이 블록을 빼고 실제 SMTP 쓰기.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "127.0.0.1:8025:8025"
 
   frontend:
     build:

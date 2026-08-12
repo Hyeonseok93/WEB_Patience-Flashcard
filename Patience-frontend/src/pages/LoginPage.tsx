@@ -25,6 +25,8 @@ export default function LoginPage() {
         submitLabel="로그인"
         pendingLabel="확인 중…"
         errorFallback="로그인에 실패했습니다."
+        usernameMaxLength={10}
+        passwordMaxLength={72}
         passwordAutoComplete="current-password"
         submitClassName="bg-[var(--moss)] text-[var(--sand)] hover:bg-[var(--moss-deep)]"
         onSubmit={async (username, password) => {

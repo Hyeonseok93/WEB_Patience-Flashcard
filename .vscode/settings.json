@@ -1,6 +1,9 @@
 {
   "java.import.gradle.enabled": true,
-  "java.import.gradle.wrapper.enabled": true,
+  "java.import.gradle.wrapper.enabled": false,
+  "java.import.gradle.version": "8.12.1",
+  "java.import.maven.enabled": false,
   "java.configuration.updateBuildConfiguration": "automatic",
+  "java.project.importOnFirstTimeStartup": "automatic",
   "gradle.nestedProjects": true
 }

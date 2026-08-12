@@ -21,7 +21,7 @@ const RESERVED = new Set([
 ]);
 
 export const USERNAME_MIN = 3;
-export const USERNAME_MAX = 32;
+export const USERNAME_MAX = 10;
 
 export function normalizeUsername(raw: string): string {
   return raw.trim().toLowerCase();
@@ -29,11 +29,11 @@ export function normalizeUsername(raw: string): string {
 
 /** Korean reason if invalid, otherwise null. Keep in sync with UsernameRules.java. */
 export function usernameInvalidReason(normalized: string): string | null {
-  if (!normalized) return "아이디를 입력해 주세요.";
+  if (!normalized) return "닉네임을 입력해 주세요.";
   if (!/^[a-z0-9]+$/.test(normalized)) return "영문 소문자와 숫자만 쓸 수 있어요.";
-  if (normalized.length < USERNAME_MIN) return "아이디는 3자 이상이어야 해요.";
-  if (normalized.length > USERNAME_MAX) return "아이디는 32자까지예요.";
-  if (RESERVED.has(normalized)) return "이 아이디는 쓸 수 없어요.";
+  if (normalized.length < USERNAME_MIN) return "닉네임은 3자 이상이어야 해요.";
+  if (normalized.length > USERNAME_MAX) return "닉네임은 10자까지예요.";
+  if (RESERVED.has(normalized)) return "이 닉네임은 쓸 수 없어요.";
   return null;
 }
 

@@ -1,0 +1,5 @@
+package com.patience.flashcard.web.dto;
+
+import jakarta.validation.constraints.NotBlank;
+
+public record EmailChallengeRequest(@NotBlank String email) {}

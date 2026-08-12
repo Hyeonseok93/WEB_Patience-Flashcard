@@ -1,7 +1,11 @@
 package com.patience.flashcard.web;
 
 import com.patience.flashcard.service.AuthService;
+import com.patience.flashcard.web.dto.EmailAvailableResponse;
+import com.patience.flashcard.web.dto.EmailChallengeRequest;
+import com.patience.flashcard.web.dto.EmailConfirmRequest;
 import com.patience.flashcard.web.dto.LoginRequest;
+import com.patience.flashcard.web.dto.MessageResponse;
 import com.patience.flashcard.web.dto.SignupRequest;
 import com.patience.flashcard.web.dto.UserResponse;
 import com.patience.flashcard.web.dto.UsernameAvailableResponse;
@@ -28,8 +32,29 @@ public class AuthController {
 
   @GetMapping("/username-available")
   public UsernameAvailableResponse usernameAvailable(
-      @RequestParam(required = false) String username) {
-    return authService.usernameAvailable(username);
+      @RequestParam(required = false) String username, HttpServletRequest httpRequest) {
+    return authService.usernameAvailable(username, ClientIp.of(httpRequest));
+  }
+
+  @GetMapping("/email-available")
+  public EmailAvailableResponse emailAvailable(
+      @RequestParam(required = false) String email, HttpServletRequest httpRequest) {
+    return authService.emailAvailable(email, ClientIp.of(httpRequest));
+  }
+
+  @PostMapping("/email-challenge")
+  public MessageResponse emailChallenge(
+      @Valid @RequestBody EmailChallengeRequest request, HttpServletRequest httpRequest) {
+    return authService.requestEmailCode(request.email(), ClientIp.of(httpRequest));
+  }
+
+  @PostMapping("/email-confirm")
+  public MessageResponse emailConfirm(
+      @Valid @RequestBody EmailConfirmRequest request,
+      HttpServletRequest httpRequest,
+      HttpServletResponse response) {
+    return authService.confirmEmailCode(
+        request.email(), request.code(), ClientIp.of(httpRequest), response);
   }
 
   @PostMapping("/signup")
@@ -37,12 +62,15 @@ public class AuthController {
       @Valid @RequestBody SignupRequest request,
       HttpServletRequest httpRequest,
       HttpServletResponse response) {
-    return authService.signup(request, httpRequest.getRemoteAddr(), response);
+    return authService.signup(request, ClientIp.of(httpRequest), httpRequest, response);
   }
 
   @PostMapping("/login")
-  public UserResponse login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
-    return authService.login(request, response);
+  public UserResponse login(
+      @Valid @RequestBody LoginRequest request,
+      HttpServletRequest httpRequest,
+      HttpServletResponse response) {
+    return authService.login(request, ClientIp.of(httpRequest), response);
   }
 
   @PostMapping("/logout")

@@ -17,6 +17,7 @@ class UsernameRulesTest {
     assertThat(UsernameRules.invalidReason("admin")).contains("쓸 수 없어요");
     assertThat(UsernameRules.invalidReason("안녕")).contains("영문");
     assertThat(UsernameRules.invalidReason("ok_user")).contains("숫자만");
+    assertThat(UsernameRules.invalidReason("abcdefghijk")).contains("10자");
     assertThat(UsernameRules.invalidReason("okuser")).isNull();
   }
 }

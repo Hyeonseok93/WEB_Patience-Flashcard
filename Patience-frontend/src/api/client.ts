@@ -1,6 +1,9 @@
 export type User = {
   id: number;
   username: string;
+  email: string;
+  // 공개 후 미인증 계정을 다시 허용할 때:
+  // emailVerified: boolean;
 };
 
 export type DeckSourceType = "BUILTIN" | "USER";
@@ -94,10 +97,24 @@ export const api = {
     request<{ username: string; available: boolean; message: string }>(
       `/api/auth/username-available?username=${encodeURIComponent(username)}`,
     ),
-  signup: (username: string, password: string) =>
+  emailAvailable: (email: string) =>
+    request<{ email: string; available: boolean; message: string }>(
+      `/api/auth/email-available?email=${encodeURIComponent(email)}`,
+    ),
+  requestEmailCode: (email: string) =>
+    request<{ message: string }>("/api/auth/email-challenge", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  confirmEmailCode: (email: string, code: string) =>
+    request<{ message: string }>("/api/auth/email-confirm", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    }),
+  signup: (username: string, email: string, password: string) =>
     request<User>("/api/auth/signup", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, email, password }),
     }),
   login: (username: string, password: string) =>
     request<User>("/api/auth/login", {

@@ -60,7 +60,7 @@ export function AuthForm({
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block text-sm font-medium text-[var(--ink)]/80">
-          아이디
+          닉네임
           <input
             className={`mt-1.5 ${field}`}
             value={username}

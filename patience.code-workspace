@@ -1,0 +1,23 @@
+{
+  "folders": [
+    {
+      "name": "Patience-backend",
+      "path": "Patience-backend"
+    },
+    {
+      "name": "Patience-frontend",
+      "path": "Patience-frontend"
+    },
+    {
+      "name": "Patience-local",
+      "path": "Patience-local"
+    }
+  ],
+  "settings": {
+    "java.import.gradle.enabled": true,
+    "java.import.gradle.wrapper.enabled": true,
+    "java.import.maven.enabled": false,
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.project.importOnFirstTimeStartup": "automatic"
+  }
+}

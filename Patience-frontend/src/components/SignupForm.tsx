@@ -1,7 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import { EMAIL_MAX, emailInvalidReason, normalizeEmail } from "../auth/emailRules";
+import { useAvailableField } from "../auth/useAvailableField";
 import {
   USERNAME_MAX,
   normalizeUsername,
@@ -12,77 +14,90 @@ import { rememberJustJoined } from "../auth/welcome";
 import { fieldClass } from "../lib/fieldClass";
 import { messageOf } from "../lib/errors";
 
-const DEBOUNCE_MS = 300;
-
 export function SignupForm() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsOn, setCapsOn] = useState(false);
-  const [usernameNote, setUsernameNote] = useState<string | null>(null);
-  const [usernameOk, setUsernameOk] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [code, setCode] = useState("");
+  const [verified, setVerified] = useState(false);
+  const [challengeSent, setChallengeSent] = useState(false);
+  const [challengePending, setChallengePending] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [codeNote, setCodeNote] = useState<string | null>(null);
+
+  const checkUsername = useCallback((value: string) => api.usernameAvailable(value), []);
+  const checkEmail = useCallback((value: string) => api.emailAvailable(value), []);
+  const nick = useAvailableField(username, normalizeUsername, usernameInvalidReason, checkUsername);
+  const mail = useAvailableField(email, normalizeEmail, emailInvalidReason, checkEmail);
+
+  useEffect(() => {
+    setVerified(false);
+    setCode("");
+    setChallengeSent(false);
+    setCodeNote(null);
+  }, [email]);
 
   const strength = passwordStrength(password);
   const passwordShort = password.length > 0 && password.length < 8;
   const passwordLong = password.length > 72;
   const confirmMismatch = confirm.length > 0 && confirm !== password;
+  const canChallenge = mail.ok && !mail.checking && !challengePending && !verified;
+  const canConfirm = challengeSent && !verified && code.length === 6 && !confirmPending;
   const canSubmit =
-    usernameOk &&
-    !checking &&
+    nick.ok &&
+    mail.ok &&
+    verified &&
+    !nick.checking &&
+    !mail.checking &&
     password.length >= 8 &&
     password.length <= 72 &&
     confirm === password &&
     !pending;
 
-  useEffect(() => {
-    const normalized = normalizeUsername(username);
-    const local = usernameInvalidReason(normalized);
-    setUsernameOk(false);
+  async function onChallenge() {
+    if (!canChallenge) return;
+    setChallengePending(true);
     setFormError(null);
-    if (!normalized) {
-      setUsernameNote(null);
-      setChecking(false);
-      return;
-    }
-    if (local) {
-      setUsernameNote(local);
-      setChecking(false);
-      return;
-    }
-
-    setChecking(true);
-    setUsernameNote("확인 중…");
-    const ac = new AbortController();
-    const timer = window.setTimeout(async () => {
-      try {
-        const result = await api.usernameAvailable(normalized);
-        if (ac.signal.aborted) return;
-        setUsernameOk(result.available);
-        setUsernameNote(result.message);
-      } catch (err) {
-        if (ac.signal.aborted) return;
-        setUsernameOk(false);
-        setUsernameNote(
-          err instanceof ApiError && err.status === 429
-            ? "확인이 잠시 밀렸어요. 조금 뒤에 다시 쳐 보세요."
-            : "확인하지 못했어요. 잠시 후 다시 쳐 보세요.",
-        );
-      } finally {
-        if (!ac.signal.aborted) setChecking(false);
+    setCodeNote(null);
+    try {
+      const result = await api.requestEmailCode(normalizeEmail(email));
+      setChallengeSent(true);
+      setCode("");
+      setCodeNote(result.message);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        mail.setOk(false);
+        mail.setNote("이미 존재하는 이메일");
+      } else {
+        setFormError(messageOf(err, "인증 번호를 보내지 못했어요. 다시 해 주세요."));
       }
-    }, DEBOUNCE_MS);
+    } finally {
+      setChallengePending(false);
+    }
+  }
 
-    return () => {
-      ac.abort();
-      window.clearTimeout(timer);
-    };
-  }, [username]);
+  async function onConfirm() {
+    if (!canConfirm) return;
+    setConfirmPending(true);
+    setFormError(null);
+    try {
+      await api.confirmEmailCode(normalizeEmail(email), code);
+      setVerified(true);
+      setCodeNote("인증 완료");
+    } catch (err) {
+      setVerified(false);
+      setCodeNote(messageOf(err, "인증 번호가 달라요."));
+    } finally {
+      setConfirmPending(false);
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -90,14 +105,21 @@ export function SignupForm() {
     setPending(true);
     setFormError(null);
     try {
-      const me = await api.signup(normalizeUsername(username), password);
+      const me = await api.signup(normalizeUsername(username), normalizeEmail(email), password);
       setUser(me);
       rememberJustJoined(me.username);
       navigate("/", { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setUsernameOk(false);
-        setUsernameNote("이미 있어요");
+        if (err.message.includes("이메일")) {
+          mail.setOk(false);
+          mail.setNote("이미 존재하는 이메일");
+          setVerified(false);
+          setChallengeSent(false);
+        } else {
+          nick.setOk(false);
+          nick.setNote("이미 있는 닉네임이에요");
+        }
       } else if (err instanceof ApiError && err.status === 429) {
         setFormError(err.message);
       } else {
@@ -108,7 +130,8 @@ export function SignupForm() {
     }
   }
 
-  const usernameTone = !username || checking ? "default" : usernameOk ? "ok" : usernameNote ? "bad" : "default";
+  const nickTone = !username || nick.checking ? "default" : nick.ok ? "ok" : nick.note ? "bad" : "default";
+  const mailTone = verified ? "ok" : !email || mail.checking ? "default" : mail.ok ? "ok" : mail.note ? "bad" : "default";
   const passwordTone = passwordShort || passwordLong ? "bad" : "default";
   const confirmTone = confirmMismatch ? "bad" : confirm.length > 0 && confirm === password ? "ok" : "default";
 
@@ -116,33 +139,94 @@ export function SignupForm() {
     <>
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <label className="block text-sm font-medium text-[var(--ink)]/80">
-          아이디
+          닉네임
           <input
-            className={`mt-1.5 ${fieldClass("gold", usernameTone)}`}
+            className={`mt-1.5 ${fieldClass("gold", nickTone)}`}
             value={username}
             onChange={(e) => setUsername(normalizeUsername(e.target.value))}
             autoComplete="username"
             autoCapitalize="off"
             spellCheck={false}
             maxLength={USERNAME_MAX}
-            aria-invalid={Boolean(username) && !usernameOk}
-            aria-describedby="signup-username-note"
+            aria-invalid={Boolean(username) && !nick.ok}
+            aria-describedby="signup-nick-note"
           />
           <span
-            id="signup-username-note"
-            className={`mt-1.5 block text-xs font-normal ${
-              usernameOk
-                ? "text-[var(--leaf)]"
-                : checking
-                  ? "text-[var(--ink)]/45"
-                  : usernameNote
-                    ? "text-[#8a3b24]"
-                    : "text-[var(--ink)]/45"
-            }`}
+            id="signup-nick-note"
+            className={`mt-1.5 block text-xs font-normal ${fieldNoteClass(nick.ok, nick.checking, nick.note)}`}
           >
-            {usernameNote ?? "영문 소문자·숫자 조합 3–32자"}
+            {nick.note ?? "영문 소문자·숫자 조합 3–10자"}
           </span>
         </label>
+
+        <div>
+          <label className="block text-sm font-medium text-[var(--ink)]/80">
+            이메일
+            <div className="mt-1.5 flex gap-2">
+              <input
+                type="email"
+                className={`min-w-0 flex-1 ${fieldClass("gold", mailTone)}`}
+                value={email}
+                onChange={(e) => setEmail(normalizeEmail(e.target.value))}
+                autoComplete="email"
+                maxLength={EMAIL_MAX}
+                aria-invalid={Boolean(email) && !mail.ok}
+                aria-describedby="signup-mail-note"
+              />
+              <button
+                type="button"
+                disabled={!canChallenge}
+                onClick={() => void onChallenge()}
+                className="shrink-0 rounded-full bg-[var(--moss)] px-4 py-2 text-sm font-semibold text-[var(--sand)] transition hover:bg-[var(--moss-deep)] disabled:cursor-not-allowed disabled:bg-[var(--ink)]/10 disabled:text-[var(--ink)]/30 disabled:hover:bg-[var(--ink)]/10"
+              >
+                {challengePending ? "보내는 중…" : verified ? "인증 완료" : "인증하기"}
+              </button>
+            </div>
+          </label>
+          <span
+            id="signup-mail-note"
+            className={`mt-1.5 block text-xs font-normal ${fieldNoteClass(mail.ok, mail.checking, mail.note)}`}
+          >
+            {mail.note ?? "계정 하나당 메일 하나. 인증해야 자리를 만들 수 있어요."}
+          </span>
+        </div>
+
+        {challengeSent && !verified ? (
+          <div>
+            <label className="block text-sm font-medium text-[var(--ink)]/80">
+              인증 번호
+              <div className="mt-1.5 flex gap-2">
+                <input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  className={`min-w-0 flex-1 tracking-[0.35em] ${fieldClass("gold", "default")}`}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  maxLength={6}
+                  aria-describedby="signup-code-note"
+                />
+                <button
+                  type="button"
+                  disabled={!canConfirm}
+                  onClick={() => void onConfirm()}
+                  className="shrink-0 rounded-full bg-[var(--gold)] px-4 py-2 text-sm font-semibold text-[var(--moss-deep)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:bg-[var(--ink)]/10 disabled:text-[var(--ink)]/30 disabled:hover:brightness-100"
+                >
+                  {confirmPending ? "확인 중…" : "확인"}
+                </button>
+              </div>
+            </label>
+            <span
+              id="signup-code-note"
+              className={`mt-1.5 block text-xs font-normal ${codeNote?.includes("달라") || codeNote?.includes("만료") ? "text-[#8a3b24]" : "text-[var(--ink)]/45"}`}
+            >
+              {codeNote ?? "메일로 받은 6자리를 입력해 주세요."}
+            </span>
+          </div>
+        ) : null}
+
+        {verified ? (
+          <p className="text-xs font-medium text-[var(--leaf)]">메일 인증이 완료됐어요.</p>
+        ) : null}
 
         <div className="space-y-3 rounded-3xl bg-[var(--sand)]/35 p-4 ring-1 ring-[var(--mist)]">
           <label className="block text-sm font-medium text-[var(--ink)]/80">
@@ -222,6 +306,13 @@ export function SignupForm() {
       </p>
     </>
   );
+}
+
+function fieldNoteClass(ok: boolean, checking: boolean, note: string | null) {
+  if (ok) return "text-[var(--leaf)]";
+  if (checking) return "text-[var(--ink)]/45";
+  if (note) return "text-[#8a3b24]";
+  return "text-[var(--ink)]/45";
 }
 
 function PasswordMeter({ level, label }: { level: 0 | 1 | 2 | 3; label: string }) {

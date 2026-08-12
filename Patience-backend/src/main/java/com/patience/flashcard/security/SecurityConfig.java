@@ -33,6 +33,8 @@ public class SecurityConfig {
   @Bean
   SecurityFilterChain securityFilterChain(
       HttpSecurity http, JwtAuthFilter jwtAuthFilter, ObjectMapper objectMapper) throws Exception {
+    // 공개 서비스: FE와 API 출처가 갈리면 CSRF 토큰을 켜기.
+    // 지금은 nginx 같은 출처 + SameSite=Lax라 꺼 둠.
     http.csrf(csrf -> csrf.disable())
         .cors(Customizer.withDefaults())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -42,7 +44,10 @@ public class SecurityConfig {
                         "/actuator/health",
                         "/api/auth/signup",
                         "/api/auth/login",
-                        "/api/auth/username-available")
+                        "/api/auth/username-available",
+                        "/api/auth/email-available",
+                        "/api/auth/email-challenge",
+                        "/api/auth/email-confirm")
                     .permitAll()
                     .requestMatchers(HttpMethod.OPTIONS, "/**")
                     .permitAll()
@@ -75,6 +80,7 @@ public class SecurityConfig {
   @Bean
   CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
+    // 공개 서비스: 실제 사이트 주소만 넣기. 예) https://patience.example.com
     config.setAllowedOriginPatterns(
         List.of("http://localhost", "http://localhost:*", "http://127.0.0.1:*"));
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

@@ -3,8 +3,24 @@ CREATE TABLE users (
     username        VARCHAR(64)  NOT NULL UNIQUE
                     CHECK (username = LOWER(username)),
     password_hash   VARCHAR(255) NOT NULL,
+    email           VARCHAR(254) NOT NULL UNIQUE
+                    CHECK (email = LOWER(email)),
+    email_verified_at TIMESTAMPTZ NOT NULL,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE email_challenges (
+    id            BIGSERIAL PRIMARY KEY,
+    email         VARCHAR(254) NOT NULL,
+    code_hash     VARCHAR(64)  NOT NULL,
+    proof_hash    VARCHAR(64)  UNIQUE,
+    expires_at    TIMESTAMPTZ  NOT NULL,
+    confirmed_at  TIMESTAMPTZ,
+    consumed_at   TIMESTAMPTZ,
+    failed_attempts INT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX ix_email_challenges_email ON email_challenges (email);
 
 CREATE TABLE decks (
     id              BIGSERIAL PRIMARY KEY,
