@@ -5,5 +5,11 @@
   "java.import.maven.enabled": false,
   "java.configuration.updateBuildConfiguration": "automatic",
   "java.project.importOnFirstTimeStartup": "automatic",
-  "gradle.nestedProjects": true
+  "gradle.nestedProjects": true,
+  "java.import.exclusions": [
+    "**/Patience-frontend/**",
+    "**/Patience-local/**",
+    "**/node_modules/**",
+    "**/.git/**"
+  ]
 }

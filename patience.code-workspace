@@ -18,6 +18,15 @@
     "java.import.gradle.wrapper.enabled": true,
     "java.import.maven.enabled": false,
     "java.configuration.updateBuildConfiguration": "automatic",
-    "java.project.importOnFirstTimeStartup": "automatic"
+    "java.project.importOnFirstTimeStartup": "automatic",
+    "java.import.exclusions": [
+      "**/Patience-frontend/**",
+      "**/Patience-local/**",
+      "**/node_modules/**",
+      "**/.git/**"
+    ]
+  },
+  "extensions": {
+    "recommendations": ["vscjava.vscode-java-pack"]
   }
 }
