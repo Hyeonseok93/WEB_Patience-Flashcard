@@ -14,6 +14,7 @@ export type DeckSummary = {
   sourceType: DeckSourceType;
   cardCount: number;
   studyLevels: number | null;
+  clearCount: number;
   updatedAt: string;
 };
 
@@ -42,6 +43,7 @@ export type ProgressPayload = {
   levelsJson: string;
   queueJson: string;
   completedCount: number;
+  clearCount: number;
   exists: boolean;
 };
 
@@ -135,6 +137,29 @@ export const api = {
   builtinDecks: () => request<DeckSummary[]>("/api/decks/builtin"),
   myDecks: () => request<DeckSummary[]>("/api/decks/mine"),
   deckDetail: (deckId: number) => request<DeckDetail>(`/api/decks/${deckId}`),
+  createDeck: (name: string) =>
+    request<DeckSummary>("/api/decks", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  copyDeck: (deckId: number) =>
+    request<DeckSummary>(`/api/decks/${deckId}/copy`, { method: "POST" }),
+  exportDeck: async (deckId: number, filename?: string) => {
+    const res = await fetch(`/api/decks/${deckId}/export`, { credentials: "include" });
+    if (!res.ok) {
+      if (res.status === 401) unauthorizedHandler?.();
+      throw await parseError(res);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename?.trim() || `patience-deck-${deckId}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   importDeck: (file: File, name?: string) => {
     const form = new FormData();
     form.append("file", file);

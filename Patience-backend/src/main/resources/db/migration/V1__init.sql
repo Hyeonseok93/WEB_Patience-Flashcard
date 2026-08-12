@@ -53,6 +53,7 @@ CREATE TABLE study_progress (
     levels_json         JSONB        NOT NULL DEFAULT '{"1":[],"2":[],"3":[]}'::jsonb,
     queue_json          JSONB        NOT NULL DEFAULT '[]'::jsonb,
     completed_count     INT          NOT NULL DEFAULT 0,
+    clear_count         INT          NOT NULL DEFAULT 0,
     updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     UNIQUE (user_id, deck_id)
 );

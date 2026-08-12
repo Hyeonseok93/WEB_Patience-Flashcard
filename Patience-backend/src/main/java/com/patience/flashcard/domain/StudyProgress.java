@@ -43,6 +43,9 @@ public class StudyProgress {
   @Column(name = "completed_count", nullable = false)
   private int completedCount;
 
+  @Column(name = "clear_count", nullable = false)
+  private int clearCount;
+
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt = Instant.now();
 
@@ -88,6 +91,14 @@ public class StudyProgress {
 
   public void setCompletedCount(int completedCount) {
     this.completedCount = completedCount;
+  }
+
+  public int getClearCount() {
+    return clearCount;
+  }
+
+  public void setClearCount(int clearCount) {
+    this.clearCount = clearCount;
   }
 
   public Instant getUpdatedAt() {

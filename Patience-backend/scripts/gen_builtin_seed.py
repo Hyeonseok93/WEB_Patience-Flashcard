@@ -243,8 +243,11 @@ def values_sql(pairs: list[tuple[str, str]]) -> str:
     return ",\n".join(lines)
 
 
-def flipped(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    return [(back, front) for front, back in pairs]
+def capital_cards() -> list[tuple[str, str]]:
+    return [
+        (f"{country_ko}\n{country_en}", f"{capital_ko}\n{capital_en}")
+        for country_ko, country_en, capital_ko, capital_en in WORLD_CAPITALS
+    ]
 
 
 def sajaseonge_cards() -> list[tuple[str, str]]:
@@ -277,20 +280,19 @@ def main() -> None:
     out += deck_block("일본어 · 히라가나", hiragana_ko, 10) + "\n"
     out += deck_block("일본어 · 히라가나 탁음", hiragana_daku, 20) + "\n"
     out += deck_block("일본어 · 히라가나 요음", hiragana_yoon, 30) + "\n"
-    out += deck_block("일본어 · 히라가나 받아쓰기", flipped(hiragana_ko), 40) + "\n"
-    out += deck_block("일본어 · 가타카나", katakana_ko, 50) + "\n"
-    out += deck_block("일본어 · 가타카나 탁음", katakana_daku, 60) + "\n"
-    out += deck_block("일본어 · 가타카나 받아쓰기", flipped(katakana_ko), 70) + "\n"
-    out += deck_block("일본어 · 숫자", numbers, 80) + "\n"
-    out += deck_block("지리 · 세계 수도", WORLD_CAPITALS, 90) + "\n"
-    out += deck_block("과학 · 원소 기호", ELEMENTS, 100) + "\n"
-    out += deck_block("국어 · 사자성어", sajaseonge_cards(), 110) + "\n"
+    out += deck_block("일본어 · 가타카나", katakana_ko, 40) + "\n"
+    out += deck_block("일본어 · 가타카나 탁음", katakana_daku, 50) + "\n"
+    out += deck_block("일본어 · 숫자", numbers, 60) + "\n"
+    out += deck_block("지리 · 세계 수도", capital_cards(), 70) + "\n"
+    out += deck_block("과학 · 원소 기호", ELEMENTS, 80) + "\n"
+    out += deck_block("국어 · 사자성어", sajaseonge_cards(), 90) + "\n"
 
     root = Path(__file__).resolve().parents[1]
     path = root / "src/main/resources/db/migration/V2__seed_builtin_jp_decks.sql"
     path.write_text(out.rstrip() + "\n", encoding="utf-8")
     total = (
-        (len(hiragana_ko) + len(katakana_ko)) * 2
+        len(hiragana_ko)
+        + len(katakana_ko)
         + len(hiragana_daku)
         + len(katakana_daku)
         + len(hiragana_yoon)

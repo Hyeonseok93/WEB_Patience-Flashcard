@@ -25,12 +25,13 @@ public interface StudyProgressRepository extends JpaRepository<StudyProgress, Lo
   @Modifying
   @Query(
       value =
-          "INSERT INTO study_progress (user_id, deck_id, levels_json, queue_json, completed_count, updated_at) "
-              + "VALUES (:userId, :deckId, cast(:levelsJson AS jsonb), cast(:queueJson AS jsonb), :completedCount, :updatedAt) "
+          "INSERT INTO study_progress (user_id, deck_id, levels_json, queue_json, completed_count, clear_count, updated_at) "
+              + "VALUES (:userId, :deckId, cast(:levelsJson AS jsonb), cast(:queueJson AS jsonb), :completedCount, :clearCount, :updatedAt) "
               + "ON CONFLICT (user_id, deck_id) DO UPDATE SET "
               + "levels_json = EXCLUDED.levels_json, "
               + "queue_json = EXCLUDED.queue_json, "
               + "completed_count = EXCLUDED.completed_count, "
+              + "clear_count = EXCLUDED.clear_count, "
               + "updated_at = EXCLUDED.updated_at",
       nativeQuery = true)
   void upsert(
@@ -39,5 +40,24 @@ public interface StudyProgressRepository extends JpaRepository<StudyProgress, Lo
       @Param("levelsJson") String levelsJson,
       @Param("queueJson") String queueJson,
       @Param("completedCount") int completedCount,
+      @Param("clearCount") int clearCount,
+      @Param("updatedAt") Instant updatedAt);
+
+  /**
+   * Drop play state but keep clear_count by rewriting to an inactive stub. Prefer delete when
+   * clear_count is already 0 (handled in service).
+   */
+  @Modifying
+  @Query(
+      value =
+          "UPDATE study_progress SET levels_json = cast(:levelsJson AS jsonb), "
+              + "queue_json = cast(:queueJson AS jsonb), completed_count = 0, updated_at = :updatedAt "
+              + "WHERE user_id = :userId AND deck_id = :deckId",
+      nativeQuery = true)
+  void clearPlayState(
+      @Param("userId") Long userId,
+      @Param("deckId") Long deckId,
+      @Param("levelsJson") String levelsJson,
+      @Param("queueJson") String queueJson,
       @Param("updatedAt") Instant updatedAt);
 }

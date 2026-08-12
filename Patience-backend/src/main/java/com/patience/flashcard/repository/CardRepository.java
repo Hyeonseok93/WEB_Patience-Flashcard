@@ -23,10 +23,6 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
   Optional<Card> findByIdAndDeck(Long id, Deck deck);
 
-  boolean existsByDeckAndFrontTextIgnoreCase(Deck deck, String frontText);
-
-  boolean existsByDeckAndFrontTextIgnoreCaseAndIdNot(Deck deck, String frontText, Long id);
-
   @Query("select coalesce(max(c.sortOrder), 0) from Card c where c.deck = :deck")
   int maxSortOrder(@Param("deck") Deck deck);
 

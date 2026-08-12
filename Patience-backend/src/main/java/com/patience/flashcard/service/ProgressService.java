@@ -3,6 +3,7 @@ package com.patience.flashcard.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.patience.flashcard.domain.Deck;
+import com.patience.flashcard.domain.StudyProgress;
 import com.patience.flashcard.domain.UserAccount;
 import com.patience.flashcard.repository.CardRepository;
 import com.patience.flashcard.repository.StudyProgressRepository;
@@ -40,7 +41,8 @@ public class ProgressService {
 
   /**
    * Read-only load. Invalid rows are returned as-is ({@code exists=true}) so the client can warn
-   * and reset; GET never mutates stored progress.
+   * and reset; GET never mutates stored progress. Inactive stubs (clear history only) report
+   * {@code exists=false}.
    */
   @Transactional(readOnly = true)
   public ProgressResponse get(UserAccount user, Long deckId) {
@@ -50,29 +52,94 @@ public class ProgressService {
         .map(
             p ->
                 new ProgressResponse(
-                    deckId, p.getLevelsJson(), p.getQueueJson(), p.getCompletedCount(), true))
-        .orElseGet(() -> new ProgressResponse(deckId, EMPTY_LEVELS, EMPTY_QUEUE, 0, false));
+                    deckId,
+                    p.getLevelsJson(),
+                    p.getQueueJson(),
+                    p.getCompletedCount(),
+                    p.getClearCount(),
+                    isActiveProgress(p)))
+        .orElseGet(
+            () -> new ProgressResponse(deckId, EMPTY_LEVELS, EMPTY_QUEUE, 0, 0, false));
   }
 
   @Transactional
   public ProgressResponse save(UserAccount user, Long deckId, ProgressUpsertRequest request) {
     Deck deck = deckService.requireAccessible(deckId, user);
     requireValidProgress(deck, request.levelsJson(), request.queueJson(), request.completedCount());
+    int deckSize = cardRepository.findIdsByDeck(deck).size();
+    var existing = progressRepository.findByUserAndDeck(user, deck);
+    int prevCompleted = existing.map(StudyProgress::getCompletedCount).orElse(0);
+    int clearCount = existing.map(StudyProgress::getClearCount).orElse(0);
+    if (deckSize > 0
+        && request.completedCount() == deckSize
+        && prevCompleted < deckSize) {
+      clearCount += 1;
+    }
     progressRepository.upsert(
         user.getId(),
         deck.getId(),
         request.levelsJson(),
         request.queueJson(),
         request.completedCount(),
+        clearCount,
         Instant.now());
     return new ProgressResponse(
-        deckId, request.levelsJson(), request.queueJson(), request.completedCount(), true);
+        deckId,
+        request.levelsJson(),
+        request.queueJson(),
+        request.completedCount(),
+        clearCount,
+        true);
   }
 
   @Transactional
   public void reset(UserAccount user, Long deckId) {
     Deck deck = deckService.requireAccessible(deckId, user);
-    progressRepository.deleteByUserAndDeck(user, deck);
+    progressRepository
+        .findByUserAndDeck(user, deck)
+        .ifPresent(
+            p -> {
+              if (p.getClearCount() > 0) {
+                progressRepository.clearPlayState(
+                    user.getId(), deck.getId(), EMPTY_LEVELS, EMPTY_QUEUE, Instant.now());
+              } else {
+                progressRepository.deleteByUserAndDeck(user, deck);
+              }
+            });
+  }
+
+  private boolean isActiveProgress(StudyProgress progress) {
+    if (progress.getCompletedCount() > 0) {
+      return true;
+    }
+    return hasAnyIds(progress.getLevelsJson()) || hasAnyIds(progress.getQueueJson());
+  }
+
+  private boolean hasAnyIds(String json) {
+    if (json == null || json.isBlank()) {
+      return false;
+    }
+    try {
+      JsonNode node = objectMapper.readTree(json);
+      if (node == null) {
+        return false;
+      }
+      if (node.isArray()) {
+        return node.size() > 0;
+      }
+      if (node.isObject()) {
+        var fields = node.fields();
+        while (fields.hasNext()) {
+          JsonNode value = fields.next().getValue();
+          if (value != null && value.isArray() && value.size() > 0) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (Exception ex) {
+      return false;
+    }
   }
 
   /**

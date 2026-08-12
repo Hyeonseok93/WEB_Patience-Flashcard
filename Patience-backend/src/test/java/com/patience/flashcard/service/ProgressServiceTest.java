@@ -67,7 +67,7 @@ class ProgressServiceTest {
     progressService.save(user, 7L, request);
 
     verify(progressRepository)
-        .upsert(anyLong(), anyLong(), anyString(), anyString(), anyInt(), any());
+        .upsert(anyLong(), anyLong(), anyString(), anyString(), anyInt(), anyInt(), any());
   }
 
   @Test
@@ -79,7 +79,7 @@ class ProgressServiceTest {
     progressService.save(user, 7L, request);
 
     verify(progressRepository)
-        .upsert(anyLong(), anyLong(), anyString(), anyString(), anyInt(), any());
+        .upsert(anyLong(), anyLong(), anyString(), anyString(), anyInt(), anyInt(), any());
   }
 
   @Test
@@ -92,7 +92,7 @@ class ProgressServiceTest {
         .isInstanceOf(ApiException.class);
 
     verify(progressRepository, never())
-        .upsert(anyLong(), anyLong(), anyString(), anyString(), anyInt(), any());
+        .upsert(anyLong(), anyLong(), anyString(), anyString(), anyInt(), anyInt(), any());
   }
 
   @Test

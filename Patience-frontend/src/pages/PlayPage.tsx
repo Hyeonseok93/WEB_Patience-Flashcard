@@ -1,5 +1,6 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { api } from "../api/client";
 import { limitsFor } from "../play/engine";
 import {
   CARD_IN_MS,
@@ -7,29 +8,48 @@ import {
   EXIT_MS,
   LAYOUT_OPTIONS,
   STACK_IN_MS,
-  type LayoutMode,
 } from "../play/layout";
 import { ColorField, GearIcon, LayoutSketch, ResetIcon, ShuffleIcon, Slider, useDesktopGlance } from "../play/PlayChrome";
 import { FocusPane, LevelsColumn } from "../play/PlayBoard";
 import { usePlayKeyboard } from "../play/usePlayKeyboard";
 import { usePlaySession } from "../play/usePlaySession";
+import { usePlaySettings } from "../play/usePlaySettings";
+import { toPayload } from "../play/progressCodec";
+import type { GameSnapshot } from "../play/engine";
 import LevelPicker from "../ui/LevelPicker";
 
 export default function PlayPage() {
   const { deckId: deckIdParam } = useParams();
   const deckId = Number(deckIdParam);
   const session = usePlaySession(deckId);
-  const [fontSize, setFontSize] = useState(22);
-  const [widthScale, setWidthScale] = useState(2.2);
-  const [heightScale, setHeightScale] = useState(1);
-  const [focusSizeScale, setFocusSizeScale] = useState(0.82);
-  const [focusWidthScale, setFocusWidthScale] = useState(1);
-  const [frontColor, setFrontColor] = useState("#faf6ee");
-  const [backColor, setBackColor] = useState("#ffffff");
-  const [frontTextColor, setFrontTextColor] = useState("#15261f");
-  const [backTextColor, setBackTextColor] = useState("#1f4a3a");
+  const playSettings = usePlaySettings();
+  const {
+    settings,
+    setFontSize,
+    setWidthScale,
+    setHeightScale,
+    setFocusSizeScale,
+    setFocusWidthScale,
+    setFrontColor,
+    setBackColor,
+    setFrontTextColor,
+    setBackTextColor,
+    setLayoutMode,
+  } = playSettings;
+  const {
+    fontSize,
+    widthScale,
+    heightScale,
+    focusSizeScale,
+    focusWidthScale,
+    frontColor,
+    backColor,
+    frontTextColor,
+    backTextColor,
+    layoutMode,
+  } = settings;
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("classic");
+  const [reverseSides, setReverseSides] = useState(false);
   const glanceDesktop = useDesktopGlance();
 
   usePlayKeyboard({
@@ -40,6 +60,15 @@ export default function PlayPage() {
     setFlipped: session.setFlipped,
     apply: session.apply,
   });
+
+  const displayLookup = useMemo(() => {
+    if (!session.lookup || !reverseSides) return session.lookup;
+    const byId = new Map<number, { front: string; back: string }>();
+    for (const [id, text] of session.lookup.byId) {
+      byId.set(id, { front: text.back, back: text.front });
+    }
+    return { ...session.lookup, byId };
+  }, [session.lookup, reverseSides]);
 
   const levelPicker = (
     <LevelPicker
@@ -65,7 +94,7 @@ export default function PlayPage() {
     );
   }
 
-  if (session.error || !session.snapshot || !session.lookup) {
+  if (session.error || !session.snapshot || !displayLookup) {
     return (
       <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-5 text-center">
         <img src="/logo.png" alt="" className="mb-4 h-16 w-16" />
@@ -80,43 +109,16 @@ export default function PlayPage() {
     );
   }
 
-  const { snapshot, lookup, active, remaining, totalInHand } = session;
+  const { snapshot, active, remaining, totalInHand } = session;
 
   if (remaining === 0) {
     return (
-      <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[var(--moss-deep)] px-5 text-[var(--sand)]">
-        <div
-          className="animate-soft-glow pointer-events-none absolute left-1/2 top-1/3 h-72 w-72 -translate-x-1/2 rounded-full blur-3xl"
-          style={{ background: "rgba(61,122,92,0.4)" }}
-        />
-        <div className="animate-fade-up relative z-10 text-center">
-          <img
-            src="/logo.png"
-            alt=""
-            className="mx-auto h-28 w-28 drop-shadow-[0_16px_30px_rgba(0,0,0,0.4)]"
-          />
-          <p className="font-display mt-6 text-[clamp(2rem,5vw,2.8rem)] font-semibold tracking-[-0.02em]">
-            다 외웠어요
-          </p>
-          <p className="mt-3 text-[var(--sand)]/70">완전히 외운 카드 {snapshot.completedCount}장</p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => session.setResetMode("shuffle")}
-              className="rounded-full border border-[var(--sand)]/25 px-6 py-3 text-sm font-semibold transition hover:bg-white/5"
-            >
-              다시 한번
-            </button>
-            <Link
-              to="/"
-              className="rounded-full bg-[var(--gold)] px-6 py-3 text-sm font-semibold text-[var(--moss-deep)] transition hover:brightness-95"
-            >
-              세트 선택으로
-            </Link>
-          </div>
-        </div>
-        {levelPicker}
-      </main>
+      <VictoryScreen
+        deckId={deckId}
+        snapshot={snapshot}
+        onShuffleAgain={() => session.setResetMode("shuffle")}
+        levelPicker={levelPicker}
+      />
     );
   }
 
@@ -125,7 +127,7 @@ export default function PlayPage() {
   const boardProps = {
     snapshot,
     active,
-    lookup,
+    lookup: displayLookup,
     exiting: session.exiting,
     flipped: session.flipped,
     mainEnterId: session.mainEnterId,
@@ -176,6 +178,7 @@ export default function PlayPage() {
             <p className="truncate text-xs text-[var(--ink)]/45">
               <span className="font-semibold text-[var(--moss)]">{snapshot.levelCount}층</span>
               {" · "}남은 {remaining}장 · 손에 {totalInHand}장 · 대기 {snapshot.queue.length}장
+              {reverseSides ? " · 앞뒤 바꿈" : ""}
             </p>
           </div>
 
@@ -274,6 +277,29 @@ export default function PlayPage() {
                     );
                   })}
                 </div>
+              </div>
+
+              <div className="border-t border-[var(--mist)] pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReverseSides((v) => !v);
+                    session.setFlipped(false);
+                  }}
+                  aria-pressed={reverseSides}
+                  className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
+                    reverseSides
+                      ? "border-[var(--moss)] bg-[var(--moss)]/8 text-[var(--moss)]"
+                      : "border-[var(--mist)] bg-white/70 text-[var(--ink)]/70 hover:bg-white"
+                  }`}
+                >
+                  이번만 앞뒤 바꾸기
+                  <span className="mt-0.5 block text-xs font-medium text-[var(--ink)]/45">
+                    {reverseSides
+                      ? "지금 뒷면이 앞으로 나와 있어요. 다시 누르면 원래대로."
+                      : "받아쓰기처럼 반대 방향으로 외울 때 켜요. 저장되지 않아요."}
+                  </span>
+                </button>
               </div>
 
               <div
@@ -438,5 +464,78 @@ export default function PlayPage() {
       </main>
       {levelPicker}
     </div>
+  );
+}
+
+function VictoryScreen({
+  deckId,
+  snapshot,
+  onShuffleAgain,
+  levelPicker,
+}: {
+  deckId: number;
+  snapshot: GameSnapshot;
+  onShuffleAgain: () => void;
+  levelPicker: ReactNode;
+}) {
+  const [clearCount, setClearCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.saveProgress(deckId, toPayload(snapshot));
+        if (!cancelled) setClearCount(res.clearCount);
+      } catch {
+        try {
+          const res = await api.getProgress(deckId);
+          if (!cancelled) setClearCount(res.clearCount);
+        } catch {
+          if (!cancelled) setClearCount(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deckId, snapshot]);
+
+  return (
+    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[var(--moss-deep)] px-5 text-[var(--sand)]">
+      <div
+        className="animate-soft-glow pointer-events-none absolute left-1/2 top-1/3 h-72 w-72 -translate-x-1/2 rounded-full blur-3xl"
+        style={{ background: "rgba(61,122,92,0.4)" }}
+      />
+      <div className="animate-fade-up relative z-10 text-center">
+        <img
+          src="/logo.png"
+          alt=""
+          className="mx-auto h-28 w-28 drop-shadow-[0_16px_30px_rgba(0,0,0,0.4)]"
+        />
+        <p className="font-display mt-6 text-[clamp(2rem,5vw,2.8rem)] font-semibold tracking-[-0.02em]">
+          한 바퀴 끝났어요!!
+        </p>
+        <p className="mt-3 text-[var(--sand)]/70">완전히 외운 카드 {snapshot.completedCount}장</p>
+        {clearCount != null && clearCount > 0 && (
+          <p className="mt-1 text-sm text-[var(--sand)]/55">{clearCount}회 클리어</p>
+        )}
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <button
+            type="button"
+            onClick={onShuffleAgain}
+            className="rounded-full border border-[var(--sand)]/25 px-6 py-3 text-sm font-semibold transition hover:bg-white/5"
+          >
+            다시 한번
+          </button>
+          <Link
+            to="/"
+            className="rounded-full bg-[var(--gold)] px-6 py-3 text-sm font-semibold text-[var(--moss-deep)] transition hover:brightness-95"
+          >
+            세트 선택으로
+          </Link>
+        </div>
+      </div>
+      {levelPicker}
+    </main>
   );
 }

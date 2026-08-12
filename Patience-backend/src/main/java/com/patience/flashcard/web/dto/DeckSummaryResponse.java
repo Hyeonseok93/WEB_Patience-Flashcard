@@ -9,4 +9,5 @@ public record DeckSummaryResponse(
     DeckSourceType sourceType,
     long cardCount,
     Integer studyLevels,
+    int clearCount,
     Instant updatedAt) {}

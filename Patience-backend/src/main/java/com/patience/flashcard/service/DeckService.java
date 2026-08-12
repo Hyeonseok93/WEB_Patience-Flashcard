@@ -18,11 +18,8 @@ import com.patience.flashcard.web.dto.DeckSummaryResponse;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +32,7 @@ public class DeckService {
   private final CardRepository cardRepository;
   private final StudyProgressRepository progressRepository;
   private final XlsxDeckImporter xlsxImporter;
+  private final XlsxDeckExporter xlsxExporter;
   private final ObjectMapper objectMapper;
 
   public DeckService(
@@ -42,11 +40,13 @@ public class DeckService {
       CardRepository cardRepository,
       StudyProgressRepository progressRepository,
       XlsxDeckImporter xlsxImporter,
+      XlsxDeckExporter xlsxExporter,
       ObjectMapper objectMapper) {
     this.deckRepository = deckRepository;
     this.cardRepository = cardRepository;
     this.progressRepository = progressRepository;
     this.xlsxImporter = xlsxImporter;
+    this.xlsxExporter = xlsxExporter;
     this.objectMapper = objectMapper;
   }
 
@@ -64,7 +64,21 @@ public class DeckService {
   }
 
   private List<DeckSummaryResponse> summarize(List<Deck> decks, UserAccount user) {
-    Map<Long, Integer> levelsByDeck = studyLevelsByDeck(user);
+    Map<Long, Integer> levelsByDeck = new HashMap<>();
+    Map<Long, Integer> clearsByDeck = new HashMap<>();
+    for (StudyProgress progress : progressRepository.findByUser(user)) {
+      long deckId = progress.getDeck().getId();
+      if (progress.getClearCount() > 0) {
+        clearsByDeck.put(deckId, progress.getClearCount());
+      }
+      if (!isActiveProgress(progress)) {
+        continue;
+      }
+      Integer levels = levelCountOf(progress.getLevelsJson());
+      if (levels != null) {
+        levelsByDeck.put(deckId, levels);
+      }
+    }
     Map<Long, Long> countsByDeck = cardCountsByDeck(decks);
     return decks.stream()
         .map(
@@ -72,7 +86,8 @@ public class DeckService {
                 toSummary(
                     deck,
                     countsByDeck.getOrDefault(deck.getId(), 0L),
-                    levelsByDeck.get(deck.getId())))
+                    levelsByDeck.get(deck.getId()),
+                    clearsByDeck.getOrDefault(deck.getId(), 0)))
         .toList();
   }
 
@@ -87,15 +102,38 @@ public class DeckService {
     return map;
   }
 
-  private Map<Long, Integer> studyLevelsByDeck(UserAccount user) {
-    Map<Long, Integer> map = new HashMap<>();
-    for (StudyProgress progress : progressRepository.findByUser(user)) {
-      Integer levels = levelCountOf(progress.getLevelsJson());
-      if (levels != null) {
-        map.put(progress.getDeck().getId(), levels);
-      }
+  private boolean isActiveProgress(StudyProgress progress) {
+    if (progress.getCompletedCount() > 0) {
+      return true;
     }
-    return map;
+    return hasAnyIds(progress.getLevelsJson()) || hasAnyIds(progress.getQueueJson());
+  }
+
+  private boolean hasAnyIds(String json) {
+    if (json == null || json.isBlank()) {
+      return false;
+    }
+    try {
+      JsonNode node = objectMapper.readTree(json);
+      if (node == null) {
+        return false;
+      }
+      if (node.isArray()) {
+        return node.size() > 0;
+      }
+      if (node.isObject()) {
+        var fields = node.fields();
+        while (fields.hasNext()) {
+          JsonNode value = fields.next().getValue();
+          if (value != null && value.isArray() && value.size() > 0) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (Exception ex) {
+      return false;
+    }
   }
 
   private Integer levelCountOf(String levelsJson) {
@@ -136,7 +174,6 @@ public class DeckService {
     if (parsed.isEmpty()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "유효한 카드 행이 없습니다. A열=앞면, B열=뒷면을 확인하세요.");
     }
-    rejectDuplicateFronts(parsed);
 
     Deck deck = new Deck();
     deck.setName(name);
@@ -146,7 +183,53 @@ public class DeckService {
 
     List<Card> cards = buildCards(deck, parsed);
     cardRepository.saveAll(cards);
-    return toSummary(deck, cards.size(), null);
+    return toSummary(deck, cards.size(), null, 0);
+  }
+
+  @Transactional
+  public DeckSummaryResponse createEmpty(UserAccount user, String deckName) {
+    String name = resolveDeckName(user, deckName, "새 세트", null);
+    Deck deck = new Deck();
+    deck.setName(name);
+    deck.setOwner(user);
+    deck.setSourceType(DeckSourceType.USER);
+    deckRepository.save(deck);
+    return toSummary(deck, 0, null, 0);
+  }
+
+  @Transactional
+  public DeckSummaryResponse copyAccessible(Long deckId, UserAccount user) {
+    Deck source = requireAccessible(deckId, user);
+    List<Card> sourceCards = cardRepository.findByDeckOrderBySortOrderAscIdAsc(source);
+    String name = uniqueCopyName(user, source.getName());
+    Deck deck = new Deck();
+    deck.setName(name);
+    deck.setOwner(user);
+    deck.setSourceType(DeckSourceType.USER);
+    deckRepository.save(deck);
+    List<Card> copies = new ArrayList<>();
+    for (Card src : sourceCards) {
+      Card card = new Card();
+      card.setDeck(deck);
+      card.setFrontText(src.getFrontText());
+      card.setBackText(src.getBackText());
+      card.setSortOrder(src.getSortOrder());
+      copies.add(card);
+    }
+    if (!copies.isEmpty()) {
+      cardRepository.saveAll(copies);
+    }
+    return toSummary(deck, copies.size(), null, 0);
+  }
+
+  @Transactional(readOnly = true)
+  public byte[] exportMineXlsx(Long deckId, UserAccount user) {
+    Deck deck = requireOwnedUserDeck(deckId, user);
+    List<Card> cards = cardRepository.findByDeckOrderBySortOrderAscIdAsc(deck);
+    if (cards.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "내보낼 카드가 없습니다.");
+    }
+    return xlsxExporter.export(cards);
   }
 
   @Transactional
@@ -155,7 +238,7 @@ public class DeckService {
     String name = resolveDeckName(user, newName, null, deck.getId());
     deck.setName(name);
     deck.setUpdatedAt(Instant.now());
-    return toSummary(deck, cardRepository.countByDeck(deck), null);
+    return toSummary(deck, cardRepository.countByDeck(deck), null, clearCountOf(user, deck));
   }
 
   @Transactional
@@ -166,14 +249,13 @@ public class DeckService {
     if (parsed.isEmpty()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "유효한 카드 행이 없습니다. A열=앞면, B열=뒷면을 확인하세요.");
     }
-    rejectDuplicateFronts(parsed);
 
     progressRepository.deleteByUserAndDeck(user, deck);
     cardRepository.deleteByDeck(deck);
     List<Card> cards = buildCards(deck, parsed);
     cardRepository.saveAll(cards);
     deck.setUpdatedAt(Instant.now());
-    return toSummary(deck, cards.size(), null);
+    return toSummary(deck, cards.size(), null, 0);
   }
 
   @Transactional
@@ -183,9 +265,6 @@ public class DeckService {
     String back = request.back().trim();
     if (front.isEmpty() || back.isEmpty()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "앞면과 뒷면을 모두 입력하세요.");
-    }
-    if (cardRepository.existsByDeckAndFrontTextIgnoreCase(deck, front)) {
-      throw new ApiException(HttpStatus.CONFLICT, "같은 앞면의 카드가 이미 있습니다.");
     }
     Card card = new Card();
     card.setDeck(deck);
@@ -211,9 +290,6 @@ public class DeckService {
     if (front.isEmpty() || back.isEmpty()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "앞면과 뒷면을 모두 입력하세요.");
     }
-    if (cardRepository.existsByDeckAndFrontTextIgnoreCaseAndIdNot(deck, front, cardId)) {
-      throw new ApiException(HttpStatus.CONFLICT, "같은 앞면의 카드가 이미 있습니다.");
-    }
     card.setFrontText(front);
     card.setBackText(back);
     deck.setUpdatedAt(Instant.now());
@@ -227,9 +303,6 @@ public class DeckService {
         cardRepository
             .findByIdAndDeck(cardId, deck)
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다."));
-    if (cardRepository.countByDeck(deck) <= 1) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "세트에는 카드가 최소 1장 있어야 합니다.");
-    }
     cardRepository.delete(card);
     deck.setUpdatedAt(Instant.now());
     progressRepository.deleteByUserAndDeck(user, deck);
@@ -268,16 +341,6 @@ public class DeckService {
     return cards;
   }
 
-  private void rejectDuplicateFronts(List<XlsxDeckImporter.ParsedCard> parsed) {
-    Set<String> seen = new HashSet<>();
-    for (XlsxDeckImporter.ParsedCard row : parsed) {
-      String key = row.front().toLowerCase(Locale.ROOT);
-      if (!seen.add(key)) {
-        throw new ApiException(HttpStatus.BAD_REQUEST, "앞면이 중복된 카드가 있습니다: " + row.front());
-      }
-    }
-  }
-
   public Deck requireAccessible(Long deckId, UserAccount user) {
     Deck deck =
         deckRepository
@@ -292,14 +355,40 @@ public class DeckService {
     return deck;
   }
 
-  private DeckSummaryResponse toSummary(Deck deck, long cardCount, Integer studyLevels) {
+  private DeckSummaryResponse toSummary(
+      Deck deck, long cardCount, Integer studyLevels, int clearCount) {
     return new DeckSummaryResponse(
         deck.getId(),
         deck.getName(),
         deck.getSourceType(),
         cardCount,
         studyLevels,
+        clearCount,
         deck.getUpdatedAt());
+  }
+
+  private int clearCountOf(UserAccount user, Deck deck) {
+    return progressRepository
+        .findByUserAndDeck(user, deck)
+        .map(StudyProgress::getClearCount)
+        .orElse(0);
+  }
+
+  private String uniqueCopyName(UserAccount user, String sourceName) {
+    String base = sourceName == null || sourceName.isBlank() ? "세트" : sourceName.trim();
+    if (base.length() > 190) {
+      base = base.substring(0, 190);
+    }
+    String candidate = base + " 복사";
+    int n = 2;
+    while (deckRepository.existsByOwnerAndNameIgnoreCase(user, candidate)) {
+      candidate = base + " 복사 " + n;
+      n++;
+      if (candidate.length() > 200) {
+        candidate = candidate.substring(0, 200);
+      }
+    }
+    return candidate;
   }
 
   private String resolveDeckName(

@@ -5,13 +5,18 @@ import com.patience.flashcard.service.AuthService;
 import com.patience.flashcard.service.DeckService;
 import com.patience.flashcard.web.dto.CardResponse;
 import com.patience.flashcard.web.dto.CardUpsertRequest;
+import com.patience.flashcard.web.dto.CreateDeckRequest;
 import com.patience.flashcard.web.dto.DeckDetailResponse;
 import com.patience.flashcard.web.dto.DeckSummaryResponse;
 import com.patience.flashcard.web.dto.RenameDeckRequest;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -53,6 +58,41 @@ public class DeckController {
   public DeckDetailResponse detail(@PathVariable Long deckId, Authentication authentication) {
     UserAccount user = authService.requireUser(authentication);
     return deckService.getAccessibleDeck(deckId, user);
+  }
+
+  @PostMapping
+  @ResponseStatus(HttpStatus.CREATED)
+  public DeckSummaryResponse createEmpty(
+      Authentication authentication, @Valid @RequestBody CreateDeckRequest request) {
+    UserAccount user = authService.requireUser(authentication);
+    return deckService.createEmpty(user, request.name());
+  }
+
+  @PostMapping("/{deckId}/copy")
+  @ResponseStatus(HttpStatus.CREATED)
+  public DeckSummaryResponse copy(
+      @PathVariable Long deckId, Authentication authentication) {
+    UserAccount user = authService.requireUser(authentication);
+    return deckService.copyAccessible(deckId, user);
+  }
+
+  @GetMapping("/{deckId}/export")
+  public ResponseEntity<byte[]> export(
+      @PathVariable Long deckId, Authentication authentication) {
+    UserAccount user = authService.requireUser(authentication);
+    byte[] body = deckService.exportMineXlsx(deckId, user);
+    String filename = "patience-deck-" + deckId + ".xlsx";
+    return ResponseEntity.ok()
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build()
+                .toString())
+        .contentType(
+            MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        .body(body);
   }
 
   @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
