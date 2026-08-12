@@ -6,6 +6,7 @@ import com.patience.flashcard.web.dto.EmailChallengeRequest;
 import com.patience.flashcard.web.dto.EmailConfirmRequest;
 import com.patience.flashcard.web.dto.LoginRequest;
 import com.patience.flashcard.web.dto.MessageResponse;
+import com.patience.flashcard.web.dto.ResetPasswordRequest;
 import com.patience.flashcard.web.dto.SignupRequest;
 import com.patience.flashcard.web.dto.UserResponse;
 import com.patience.flashcard.web.dto.UsernameAvailableResponse;
@@ -71,6 +72,19 @@ public class AuthController {
       HttpServletRequest httpRequest,
       HttpServletResponse response) {
     return authService.login(request, ClientIp.of(httpRequest), response);
+  }
+
+  @PostMapping("/forgot-password")
+  public MessageResponse forgotPassword(
+      @Valid @RequestBody EmailChallengeRequest request, HttpServletRequest httpRequest) {
+    return authService.requestPasswordReset(request.email(), ClientIp.of(httpRequest));
+  }
+
+  @PostMapping("/reset-password")
+  public MessageResponse resetPassword(
+      @Valid @RequestBody ResetPasswordRequest request, HttpServletRequest httpRequest) {
+    return authService.resetPassword(
+        request.email(), request.code(), request.password(), ClientIp.of(httpRequest));
   }
 
   @PostMapping("/logout")

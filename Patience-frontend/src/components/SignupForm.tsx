@@ -11,6 +11,7 @@ import {
   usernameInvalidReason,
 } from "../auth/usernameRules";
 import { rememberJustJoined } from "../auth/welcome";
+import { PasswordMeter } from "./PasswordMeter";
 import { fieldClass } from "../lib/fieldClass";
 import { messageOf } from "../lib/errors";
 
@@ -179,7 +180,13 @@ export function SignupForm() {
                 onClick={() => void onChallenge()}
                 className="shrink-0 rounded-full bg-[var(--moss)] px-4 py-2 text-sm font-semibold text-[var(--sand)] transition hover:bg-[var(--moss-deep)] disabled:cursor-not-allowed disabled:bg-[var(--ink)]/10 disabled:text-[var(--ink)]/30 disabled:hover:bg-[var(--ink)]/10"
               >
-                {challengePending ? "보내는 중…" : verified ? "인증 완료" : "인증하기"}
+                {challengePending
+                  ? "보내는 중…"
+                  : verified
+                    ? "인증 완료"
+                    : challengeSent
+                      ? "다시 보내기"
+                      : "인증하기"}
               </button>
             </div>
           </label>
@@ -313,22 +320,4 @@ function fieldNoteClass(ok: boolean, checking: boolean, note: string | null) {
   if (checking) return "text-[var(--ink)]/45";
   if (note) return "text-[#8a3b24]";
   return "text-[var(--ink)]/45";
-}
-
-function PasswordMeter({ level, label }: { level: 0 | 1 | 2 | 3; label: string }) {
-  return (
-    <div className="flex items-center gap-3" aria-live="polite">
-      <div className="flex flex-1 gap-1">
-        {[1, 2, 3].map((n) => (
-          <span
-            key={n}
-            className={`h-1.5 flex-1 rounded-full ${
-              level >= n ? "bg-[var(--leaf)]" : "bg-[var(--ink)]/10"
-            }`}
-          />
-        ))}
-      </div>
-      <span className="w-12 text-right text-xs font-medium text-[var(--ink)]/45">{label}</span>
-    </div>
-  );
 }

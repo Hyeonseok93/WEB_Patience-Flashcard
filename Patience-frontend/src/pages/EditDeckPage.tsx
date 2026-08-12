@@ -216,7 +216,7 @@ export default function EditDeckPage() {
         <section className="rounded-3xl border border-dashed border-[var(--leaf)]/35 bg-white/55 p-6">
           <h2 className="text-sm font-semibold">엑셀로 카드 교체</h2>
           <p className="mt-1.5 text-sm text-[var(--ink)]/50">
-            A열 앞면 · B열 뒷면. 기존 카드와 진행도가 초기화됩니다.
+            A열 앞면 · B열 뒷면. 셀 안 Alt+Enter 줄바꿈도 그대로 들어옵니다. 기존 카드와 진행도가 초기화됩니다.
           </p>
           <input
             ref={replaceRef}
@@ -231,17 +231,19 @@ export default function EditDeckPage() {
         <section className="rounded-3xl bg-white/70 p-6 ring-1 ring-[var(--mist)]">
           <h2 className="text-sm font-semibold">카드 추가</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <input
+            <textarea
               value={front}
               onChange={(e) => setFront(e.target.value)}
-              placeholder="앞면"
-              className="rounded-2xl border border-[var(--ink)]/12 bg-white px-4 py-3 text-[0.95rem] outline-none focus:border-[var(--leaf)] focus:ring-4 focus:ring-[var(--leaf)]/15"
+              placeholder="앞면 · Enter로 줄바꿈"
+              rows={3}
+              className="resize-y rounded-2xl border border-[var(--ink)]/12 bg-white px-4 py-3 text-[0.95rem] outline-none focus:border-[var(--leaf)] focus:ring-4 focus:ring-[var(--leaf)]/15"
             />
-            <input
+            <textarea
               value={back}
               onChange={(e) => setBack(e.target.value)}
-              placeholder="뒷면"
-              className="rounded-2xl border border-[var(--ink)]/12 bg-white px-4 py-3 text-[0.95rem] outline-none focus:border-[var(--leaf)] focus:ring-4 focus:ring-[var(--leaf)]/15"
+              placeholder="뒷면 · Enter로 줄바꿈"
+              rows={3}
+              className="resize-y rounded-2xl border border-[var(--ink)]/12 bg-white px-4 py-3 text-[0.95rem] outline-none focus:border-[var(--leaf)] focus:ring-4 focus:ring-[var(--leaf)]/15"
             />
           </div>
           <button
@@ -264,15 +266,17 @@ export default function EditDeckPage() {
               >
                 {editingId === card.id ? (
                   <div className="space-y-2">
-                    <input
+                    <textarea
                       value={editFront}
                       onChange={(e) => setEditFront(e.target.value)}
-                      className="w-full rounded-xl border border-[var(--ink)]/12 px-3 py-2 text-sm"
+                      rows={3}
+                      className="w-full resize-y rounded-xl border border-[var(--ink)]/12 px-3 py-2 text-sm"
                     />
-                    <input
+                    <textarea
                       value={editBack}
                       onChange={(e) => setEditBack(e.target.value)}
-                      className="w-full rounded-xl border border-[var(--ink)]/12 px-3 py-2 text-sm"
+                      rows={3}
+                      className="w-full resize-y rounded-xl border border-[var(--ink)]/12 px-3 py-2 text-sm"
                     />
                     <div className="flex gap-2">
                       <button
@@ -294,8 +298,8 @@ export default function EditDeckPage() {
                 ) : (
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{card.front}</p>
-                      <p className="mt-0.5 truncate text-sm text-[var(--ink)]/55">{card.back}</p>
+                      <p className="whitespace-pre-wrap font-semibold">{card.front}</p>
+                      <p className="mt-0.5 whitespace-pre-wrap text-sm text-[var(--ink)]/55">{card.back}</p>
                     </div>
                     <button
                       type="button"

@@ -3,6 +3,7 @@ package com.patience.flashcard.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +14,7 @@ import com.patience.flashcard.repository.EmailChallengeRepository;
 import com.patience.flashcard.repository.UserAccountRepository;
 import com.patience.flashcard.security.JwtService;
 import com.patience.flashcard.web.ApiException;
+import com.patience.flashcard.web.dto.LoginRequest;
 import com.patience.flashcard.web.dto.SignupRequest;
 import com.patience.flashcard.web.dto.UsernameAvailableResponse;
 import jakarta.servlet.http.Cookie;
@@ -167,7 +169,8 @@ class AuthServiceTest {
     EmailChallenge row = openProof("a@b.co");
     row.setCodeHash(TokenHasher.codeHash("a@b.co", "111111"));
     row.setFailedAttempts(4);
-    when(challenges.findFirstByEmailAndConsumedAtIsNullOrderByExpiresAtDesc("a@b.co"))
+    when(challenges.findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
+            "a@b.co", EmailChallenge.PURPOSE_SIGNUP))
         .thenReturn(Optional.of(row));
 
     assertThatThrownBy(
@@ -175,6 +178,72 @@ class AuthServiceTest {
         .isInstanceOf(ApiException.class)
         .hasMessageContaining("너무 틀렸어요");
     verify(challenges).delete(row);
+  }
+
+  @Test
+  void loginLooksUpByEmailNotNickname() {
+    UserAccount user = new UserAccount();
+    ReflectionTestUtils.setField(user, "id", 1L);
+    user.setUsername("hyunm");
+    user.setEmail("a@b.co");
+    user.setPasswordHash("hash");
+    when(userRepository.findByEmailIgnoreCase("a@b.co")).thenReturn(Optional.of(user));
+    when(passwordEncoder.matches("password1", "hash")).thenReturn(true);
+    when(jwtService.cookieName()).thenReturn("PATIENCE_TOKEN");
+    when(jwtService.cookieSecure()).thenReturn(false);
+    when(jwtService.expirationMs()).thenReturn(86_400_000L);
+    when(jwtService.createToken(1L, "hyunm")).thenReturn("token");
+
+    var me = authService.login(new LoginRequest("A@B.CO", "password1"), "127.0.0.1", response);
+
+    assertThat(me.username()).isEqualTo("hyunm");
+    assertThat(me.email()).isEqualTo("a@b.co");
+    verify(userRepository, never()).findByUsernameIgnoreCase(any());
+    verify(loginRateLimiter).assertAllowed("127.0.0.1");
+  }
+
+  @Test
+  void requestPasswordResetDoesNotRevealMissingEmail() {
+    when(userRepository.findByEmailIgnoreCase("a@b.co")).thenReturn(Optional.empty());
+
+    var result = authService.requestPasswordReset("A@B.CO", "127.0.0.1");
+
+    assertThat(result.message()).isEqualTo("인증 번호를 보냈어요.");
+    verify(mailService, never()).sendResetCode(any(), any());
+    verify(challenges, never()).save(any());
+  }
+
+  @Test
+  void requestPasswordResetSendsCodeWhenUserExists() {
+    when(userRepository.findByEmailIgnoreCase("a@b.co")).thenReturn(Optional.of(new UserAccount()));
+
+    var result = authService.requestPasswordReset("a@b.co", "127.0.0.1");
+
+    assertThat(result.message()).isEqualTo("인증 번호를 보냈어요.");
+    verify(challenges).deleteOpen("a@b.co", EmailChallenge.PURPOSE_RESET);
+    verify(mailService).sendResetCode(eq("a@b.co"), any());
+  }
+
+  @Test
+  void resetPasswordUpdatesHash() {
+    EmailChallenge row = new EmailChallenge();
+    row.setEmail("a@b.co");
+    row.setPurpose(EmailChallenge.PURPOSE_RESET);
+    row.setCodeHash(TokenHasher.codeHash("a@b.co", "123456"));
+    row.setExpiresAt(Instant.now().plusSeconds(600));
+    UserAccount user = new UserAccount();
+    user.setPasswordHash("old");
+    when(challenges.findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
+            "a@b.co", EmailChallenge.PURPOSE_RESET))
+        .thenReturn(Optional.of(row));
+    when(userRepository.findByEmailIgnoreCase("a@b.co")).thenReturn(Optional.of(user));
+    when(passwordEncoder.encode("newpass12")).thenReturn("new-hash");
+
+    var result = authService.resetPassword("a@b.co", "123456", "newpass12", "127.0.0.1");
+
+    assertThat(result.message()).contains("바꿨어요");
+    assertThat(user.getPasswordHash()).isEqualTo("new-hash");
+    assertThat(row.getConsumedAt()).isNotNull();
   }
 
   @Test

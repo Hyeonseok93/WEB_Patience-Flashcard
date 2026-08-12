@@ -8,11 +8,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface EmailChallengeRepository extends JpaRepository<EmailChallenge, Long> {
-  Optional<EmailChallenge> findFirstByEmailAndConsumedAtIsNullOrderByExpiresAtDesc(String email);
+  Optional<EmailChallenge> findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
+      String email, String purpose);
 
   Optional<EmailChallenge> findByProofHashAndConsumedAtIsNull(String proofHash);
 
   @Modifying(clearAutomatically = true)
-  @Query("delete from EmailChallenge c where c.email = :email and c.consumedAt is null")
-  void deleteOpen(@Param("email") String email);
+  @Query(
+      "delete from EmailChallenge c where c.email = :email and c.purpose = :purpose and c.consumedAt is null")
+  void deleteOpen(@Param("email") String email, @Param("purpose") String purpose);
 }

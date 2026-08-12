@@ -95,7 +95,7 @@ public class XlsxDeckImporter {
     if (cell == null) {
       return "";
     }
-    return formatter.formatCellValue(cell).trim();
+    return formatter.formatCellValue(cell).replace("\r\n", "\n").replace('\r', '\n').trim();
   }
 
   public record ParsedCard(String front, String back) {}

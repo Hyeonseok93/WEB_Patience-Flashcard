@@ -32,6 +32,9 @@ public class Deck {
   @Column(name = "source_type", nullable = false, length = 16)
   private DeckSourceType sourceType;
 
+  @Column(name = "sort_order", nullable = false)
+  private int sortOrder;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt = Instant.now();
 
@@ -64,6 +67,14 @@ public class Deck {
 
   public void setSourceType(DeckSourceType sourceType) {
     this.sourceType = sourceType;
+  }
+
+  public int getSortOrder() {
+    return sortOrder;
+  }
+
+  public void setSortOrder(int sortOrder) {
+    this.sortOrder = sortOrder;
   }
 
   public Instant getCreatedAt() {

@@ -53,7 +53,7 @@ public class DeckService {
   @Transactional(readOnly = true)
   public List<DeckSummaryResponse> listBuiltin(UserAccount user) {
     return summarize(
-        deckRepository.findBySourceTypeOrderByNameAsc(DeckSourceType.BUILTIN), user);
+        deckRepository.findBySourceTypeOrderBySortOrderAscNameAsc(DeckSourceType.BUILTIN), user);
   }
 
   @Transactional(readOnly = true)

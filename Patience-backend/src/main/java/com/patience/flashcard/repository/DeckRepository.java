@@ -8,7 +8,7 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DeckRepository extends JpaRepository<Deck, Long> {
-  List<Deck> findBySourceTypeOrderByNameAsc(DeckSourceType sourceType);
+  List<Deck> findBySourceTypeOrderBySortOrderAscNameAsc(DeckSourceType sourceType);
 
   List<Deck> findByOwnerAndSourceTypeOrderByUpdatedAtDesc(
       UserAccount owner, DeckSourceType sourceType);

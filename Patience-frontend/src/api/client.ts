@@ -116,10 +116,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ username, email, password }),
     }),
-  login: (username: string, password: string) =>
+  login: (email: string, password: string) =>
     request<User>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
+    }),
+  requestPasswordReset: (email: string) =>
+    request<{ message: string }>("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (email: string, code: string, password: string) =>
+    request<{ message: string }>("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ email, code, password }),
     }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   builtinDecks: () => request<DeckSummary[]>("/api/decks/builtin"),

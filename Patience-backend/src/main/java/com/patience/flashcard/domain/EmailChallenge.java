@@ -16,8 +16,14 @@ public class EmailChallenge {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  public static final String PURPOSE_SIGNUP = "SIGNUP";
+  public static final String PURPOSE_RESET = "RESET";
+
   @Column(nullable = false, length = 254)
   private String email;
+
+  @Column(nullable = false, length = 16)
+  private String purpose = PURPOSE_SIGNUP;
 
   @Column(name = "code_hash", nullable = false, length = 64)
   private String codeHash;
@@ -43,6 +49,14 @@ public class EmailChallenge {
 
   public void setEmail(String email) {
     this.email = email;
+  }
+
+  public String getPurpose() {
+    return purpose;
+  }
+
+  public void setPurpose(String purpose) {
+    this.purpose = purpose;
   }
 
   public String getCodeHash() {

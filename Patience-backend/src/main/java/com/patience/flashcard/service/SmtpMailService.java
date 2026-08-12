@@ -33,4 +33,15 @@ public class SmtpMailService implements MailService {
     mailSender.send(message);
     log.info("Signup code queued for {}", to);
   }
+
+  @Override
+  public void sendResetCode(String to, String code) {
+    SimpleMailMessage message = new SimpleMailMessage();
+    message.setFrom(mailProperties.from());
+    message.setTo(to);
+    message.setSubject("Patience 비밀번호 찾기");
+    message.setText("비밀번호를 바꾸려면 이 번호를 입력해 주세요.\n\n" + code + "\n\n10분 동안만 유효해요.");
+    mailSender.send(message);
+    log.info("Reset code queued for {}", to);
+  }
 }

@@ -19,6 +19,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -99,10 +100,11 @@ public class AuthService {
   public MessageResponse requestEmailCode(String rawEmail, String clientIp) {
     String email = requireFreshEmail(rawEmail);
     verificationRateLimiter.assertAllowed(clientIp + ":" + email);
-    challenges.deleteOpen(email);
+    challenges.deleteOpen(email, EmailChallenge.PURPOSE_SIGNUP);
     String code = TokenHasher.sixDigits();
     EmailChallenge row = new EmailChallenge();
     row.setEmail(email);
+    row.setPurpose(EmailChallenge.PURPOSE_SIGNUP);
     row.setCodeHash(TokenHasher.codeHash(email, code));
     row.setExpiresAt(Instant.now().plus(CODE_TTL));
     challenges.save(row);
@@ -128,7 +130,8 @@ public class AuthService {
     confirmRateLimiter.assertAllowed(clientIp + ":" + email);
     EmailChallenge row =
         challenges
-            .findFirstByEmailAndConsumedAtIsNullOrderByExpiresAtDesc(email)
+            .findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
+                email, EmailChallenge.PURPOSE_SIGNUP)
             .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "먼저 인증하기를 눌러 주세요."));
     if (row.getExpiresAt().isBefore(Instant.now())) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 만료됐어요. 다시 보내 주세요.");
@@ -198,16 +201,85 @@ public class AuthService {
   @Transactional(readOnly = true)
   public UserResponse login(LoginRequest request, String clientIp, HttpServletResponse response) {
     loginRateLimiter.assertAllowed(clientIp);
-    String username = UsernameRules.normalize(request.username());
+    String email = EmailRules.normalize(request.email());
+    String invalid = EmailRules.invalidReason(email);
+    if (invalid != null) {
+      throw new BadCredentialsException("bad credentials");
+    }
     UserAccount user =
         userRepository
-            .findByUsernameIgnoreCase(username)
+            .findByEmailIgnoreCase(email)
             .orElseThrow(() -> new BadCredentialsException("bad credentials"));
     if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
       throw new BadCredentialsException("bad credentials");
     }
     writeAuthCookie(response, user);
     return toResponse(user);
+  }
+
+  @Transactional
+  public MessageResponse requestPasswordReset(String rawEmail, String clientIp) {
+    String email = EmailRules.normalize(rawEmail);
+    String invalid = EmailRules.invalidReason(email);
+    if (invalid != null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
+    }
+    verificationRateLimiter.assertAllowed(clientIp + ":reset:" + email);
+    Optional<UserAccount> user = userRepository.findByEmailIgnoreCase(email);
+    if (user.isPresent()) {
+      challenges.deleteOpen(email, EmailChallenge.PURPOSE_RESET);
+      String code = TokenHasher.sixDigits();
+      EmailChallenge row = new EmailChallenge();
+      row.setEmail(email);
+      row.setPurpose(EmailChallenge.PURPOSE_RESET);
+      row.setCodeHash(TokenHasher.codeHash(email, code));
+      row.setExpiresAt(Instant.now().plus(CODE_TTL));
+      challenges.save(row);
+      try {
+        mailService.sendResetCode(email, code);
+      } catch (Exception ex) {
+        throw new ApiException(HttpStatus.BAD_GATEWAY, "인증 메일을 보내지 못했어요. 잠시 후 다시 해 주세요.");
+      }
+    }
+    return new MessageResponse("인증 번호를 보냈어요.");
+  }
+
+  @Transactional(noRollbackFor = ApiException.class)
+  public MessageResponse resetPassword(String rawEmail, String code, String newPassword, String clientIp) {
+    String email = EmailRules.normalize(rawEmail);
+    String invalid = EmailRules.invalidReason(email);
+    if (invalid != null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
+    }
+    if (code == null || !code.matches("^\\d{6}$")) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호 6자리를 입력해 주세요.");
+    }
+    confirmRateLimiter.assertAllowed(clientIp + ":reset:" + email);
+    EmailChallenge row =
+        challenges
+            .findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
+                email, EmailChallenge.PURPOSE_RESET)
+            .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "먼저 인증하기를 눌러 주세요."));
+    if (row.getExpiresAt().isBefore(Instant.now())) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 만료됐어요. 다시 보내 주세요.");
+    }
+    if (!TokenHasher.codeHash(email, code).equals(row.getCodeHash())) {
+      int failures = row.getFailedAttempts() + 1;
+      row.setFailedAttempts(failures);
+      if (failures >= MAX_CONFIRM_FAILURES) {
+        challenges.delete(row);
+        throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 너무 틀렸어요. 다시 보내 주세요.");
+      }
+      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 달라요.");
+    }
+    UserAccount user =
+        userRepository
+            .findByEmailIgnoreCase(email)
+            .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "메일 인증을 다시 해 주세요."));
+    user.setPasswordHash(passwordEncoder.encode(newPassword));
+    row.setConfirmedAt(Instant.now());
+    row.setConsumedAt(Instant.now());
+    return new MessageResponse("비밀번호를 바꿨어요. 다시 로그인해 주세요.");
   }
 
   public void logout(HttpServletResponse response) {

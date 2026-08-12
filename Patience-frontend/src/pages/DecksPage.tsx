@@ -424,7 +424,7 @@ function DeckRow({
             <span className="inline-flex min-w-0 max-w-full items-center gap-1 truncate rounded-full bg-[var(--moss)]/12 px-2 py-0.5 font-semibold text-[var(--moss)]">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--moss)]" aria-hidden />
               <span className="truncate">
-                {deck.studyLevels}층 이어가기
+                {deck.studyLevels}층
               </span>
             </span>
           ) : (

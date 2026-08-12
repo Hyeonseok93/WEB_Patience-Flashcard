@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { EMAIL_MAX, normalizeEmail } from "../auth/emailRules";
 import { fieldClass } from "../lib/fieldClass";
 import { messageOf } from "../lib/errors";
 
@@ -7,14 +8,7 @@ export function AuthForm({
   submitLabel,
   pendingLabel,
   errorFallback,
-  usernameHint,
-  passwordHint,
-  usernameMinLength,
-  usernameMaxLength,
-  passwordMinLength,
   passwordMaxLength,
-  usernamePattern,
-  usernameAutoComplete = "username",
   passwordAutoComplete,
   submitClassName,
   footer,
@@ -24,21 +18,14 @@ export function AuthForm({
   submitLabel: string;
   pendingLabel: string;
   errorFallback: string;
-  usernameHint?: string;
-  passwordHint?: string;
-  usernameMinLength?: number;
-  usernameMaxLength?: number;
-  passwordMinLength?: number;
   passwordMaxLength?: number;
-  usernamePattern?: string;
-  usernameAutoComplete?: string;
   passwordAutoComplete: string;
   submitClassName: string;
   footer: ReactNode;
-  onSubmit: (username: string, password: string) => Promise<void>;
+  onSubmit: (email: string, password: string) => Promise<void>;
 }) {
   const field = fieldClass(accent);
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -48,7 +35,7 @@ export function AuthForm({
     setPending(true);
     setError(null);
     try {
-      await onSubmit(username, password);
+      await onSubmit(normalizeEmail(email), password);
     } catch (err) {
       setError(messageOf(err, errorFallback));
     } finally {
@@ -58,24 +45,18 @@ export function AuthForm({
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <label className="block text-sm font-medium text-[var(--ink)]/80">
-          닉네임
+          이메일
           <input
+            type="email"
             className={`mt-1.5 ${field}`}
-            value={username}
-            onChange={(e) => setUsername(e.target.value.trim().toLowerCase())}
-            autoComplete={usernameAutoComplete}
+            value={email}
+            onChange={(e) => setEmail(normalizeEmail(e.target.value))}
+            autoComplete="email"
             required
-            minLength={usernameMinLength}
-            maxLength={usernameMaxLength}
-            pattern={usernamePattern}
+            maxLength={EMAIL_MAX}
           />
-          {usernameHint ? (
-            <span className="mt-1.5 block text-xs font-normal text-[var(--ink)]/45">
-              {usernameHint}
-            </span>
-          ) : null}
         </label>
         <label className="block text-sm font-medium text-[var(--ink)]/80">
           비밀번호
@@ -86,14 +67,8 @@ export function AuthForm({
             onChange={(e) => setPassword(e.target.value)}
             autoComplete={passwordAutoComplete}
             required
-            minLength={passwordMinLength}
             maxLength={passwordMaxLength}
           />
-          {passwordHint ? (
-            <span className="mt-1.5 block text-xs font-normal text-[var(--ink)]/45">
-              {passwordHint}
-            </span>
-          ) : null}
         </label>
 
         {error && (

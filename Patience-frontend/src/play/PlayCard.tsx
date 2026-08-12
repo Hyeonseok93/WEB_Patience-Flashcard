@@ -45,7 +45,7 @@ export function PlayCard({
           onFlip();
         }
       }}
-      className={`overflow-hidden rounded-2xl [perspective:1200px] ${fill ? "h-full w-full" : ""} ${isActive ? "cursor-pointer" : "cursor-default"} ${animation} ${
+      className={`rounded-2xl [perspective:1200px] ${fill ? "h-full w-full" : ""} ${isActive ? "cursor-pointer" : "cursor-default"} ${animation} ${
         emphasize ? "ring-2 ring-[var(--moss)]" : ""
       }`}
       style={
@@ -63,7 +63,7 @@ export function PlayCard({
       aria-label={isActive ? "카드 뒤집기" : undefined}
     >
       <div
-        className="relative h-full w-full overflow-hidden transition-transform duration-500 [transform-style:preserve-3d]"
+        className="relative h-full w-full transition-transform duration-500 [transform-style:preserve-3d]"
         style={{ transform: isActive && flipped ? "rotateY(180deg)" : undefined }}
       >
         <CardFace text={front} large={large} side="front" active={isActive} emphasize={emphasize} />
@@ -103,6 +103,8 @@ function CardFace({
       style={{
         fontSize: large ? "var(--card-large-font-size)" : "clamp(10px, 1.4vw, 13px)",
         fontWeight: 600,
+        backfaceVisibility: "hidden",
+        WebkitBackfaceVisibility: "hidden",
         background: emphasize
           ? back
             ? "color-mix(in srgb, var(--card-back-bg) 82%, var(--gold) 18%)"

@@ -12,6 +12,7 @@ CREATE TABLE users (
 CREATE TABLE email_challenges (
     id            BIGSERIAL PRIMARY KEY,
     email         VARCHAR(254) NOT NULL,
+    purpose       VARCHAR(16)  NOT NULL DEFAULT 'SIGNUP',
     code_hash     VARCHAR(64)  NOT NULL,
     proof_hash    VARCHAR(64)  UNIQUE,
     expires_at    TIMESTAMPTZ  NOT NULL,
@@ -20,13 +21,14 @@ CREATE TABLE email_challenges (
     failed_attempts INT NOT NULL DEFAULT 0
 );
 
-CREATE INDEX ix_email_challenges_email ON email_challenges (email);
+CREATE INDEX ix_email_challenges_email_purpose ON email_challenges (email, purpose);
 
 CREATE TABLE decks (
     id              BIGSERIAL PRIMARY KEY,
     name            VARCHAR(200) NOT NULL,
     owner_id        BIGINT REFERENCES users(id) ON DELETE CASCADE,
     source_type     VARCHAR(16)  NOT NULL CHECK (source_type IN ('BUILTIN', 'USER')),
+    sort_order      INT          NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );

@@ -3,6 +3,7 @@ import { useAuth } from "./auth/auth-context";
 import DecksPage from "./pages/DecksPage";
 import EditDeckPage from "./pages/EditDeckPage";
 import ErrorPage from "./pages/ErrorPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import LoginPage from "./pages/LoginPage";
 import PlayPage from "./pages/PlayPage";
 import SignupPage from "./pages/SignupPage";
@@ -24,6 +25,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route
         path="/"
