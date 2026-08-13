@@ -1,10 +1,14 @@
-# <img src=".github/readme/logo.png" alt="Patience" width="48" /> Patience Flashcard
+# <img src=".github/readme/logo.png" alt="Patience" height="48" /> Patience Flashcard
 
 ## 💻 Developer
 
-| [<img src="https://github.com/Hyeonseok93.png" width="80" />](https://github.com/Hyeonseok93) |
-| :------------------------------------------------------------------------------------------: |
-|                           [김현석](https://github.com/Hyeonseok93)                            |
+<div align="center">
+
+| <a href="https://github.com/Hyeonseok93" target="_blank"><img width="120" height="120" src="https://github.com/Hyeonseok93.png" /></a> |
+| :------------------------------------------------------------------------------------------------------------------------------------: |
+|                                                [김현석](https://github.com/Hyeonseok93)                                                |
+
+</div>
 
 ---
 
