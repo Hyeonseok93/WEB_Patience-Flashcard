@@ -3,9 +3,6 @@
 !.env.example
 .docker-secrets/
 
-# Local audit notes — keep on disk, do not commit
-AUDIT_FIXES.md
-
 # Root IDE / Java LS helpers (backend keeps its own Gradle wrapper)
 /gradlew
 /gradlew.bat
