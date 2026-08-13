@@ -116,6 +116,8 @@ React에서 세트 목록·편집·플레이 UI를 제공하고, Spring Boot가 
 <summary><b>기술 스택 상세 보기</b></summary>
 <br>
 
+<div align="center">
+
 | 구분 | 기술 | 역할 |
 | --- | --- | --- |
 | **Frontend Core** | TypeScript, React 19, Vite 6 | SPA 렌더링·개발 서버·프로덕션 번들 |
@@ -127,6 +129,8 @@ React에서 세트 목록·편집·플레이 UI를 제공하고, Spring Boot가 
 | **Build & Test** | Gradle, Vitest | 백엔드 빌드, 프론트 단위 테스트 |
 | **Edge & Local** | Nginx, Docker Compose, Mailpit | 정적 서빙·`/api` 프록시, 로컬 인증 메일 UI(`/mail`) |
 
+</div>
+
 </details>
 
 ---
@@ -137,6 +141,8 @@ React에서 세트 목록·편집·플레이 UI를 제공하고, Spring Boot가 
   <img src=".github/readme/preview.png" alt="Patience preview" width="720" />
 </p>
 
+<div align="center">
+
 | 화면 | 설명 |
 | --- | --- |
 | 🔐 가입 · 로그인 | 이메일 OTP 인증 후 가입, JWT HttpOnly 쿠키 세션 |
@@ -144,6 +150,8 @@ React에서 세트 목록·편집·플레이 UI를 제공하고, Spring Boot가 
 | 🃏 플레이 | 다층 보드, 기억·까먹음·다음, 단축키, 클리어·승리 화면 |
 | ✏️ 내 세트 편집 | 이름 변경, 카드 CRUD, xlsx 교체 |
 | 🚫 접근 거부 | 타인 세트 등 403에 전용 마스코트 게이트 |
+
+</div>
 
 ---
 
@@ -252,6 +260,8 @@ cd WEB_Patience-Flashcard
 cp .env.example .env
 ```
 
+<div align="center">
+
 | 변수 | 용도 |
 | --- | --- |
 | `POSTGRES_*` | DB 이름·유저·비밀번호 |
@@ -260,6 +270,8 @@ cp .env.example .env
 | `SPRING_MAIL_*` / `APP_MAIL_FROM` | 로컬은 Compose의 Mailpit, 공개는 실제 SMTP |
 | `SPRING_PROFILES_ACTIVE` | 공개 시 `prod` |
 
+</div>
+
 ### 3. 통합 실행 (Docker Compose)
 
 ```bash
@@ -267,12 +279,16 @@ cd Patience-local
 docker compose up --build
 ```
 
+<div align="center">
+
 | 서비스 | URL |
 | --- | --- |
 | Frontend | http://localhost |
 | Backend API | http://localhost:8080 (보통 FE `/api` 경유) |
 | Health | http://localhost:8080/actuator/health |
 | Mail UI | http://localhost/mail |
+
+</div>
 
 프론트만 개발할 때:
 
