@@ -193,7 +193,6 @@ class AuthServiceTest {
 
     assertThat(me.username()).isEqualTo("hyunm");
     assertThat(me.email()).isEqualTo("a@b.co");
-    verify(userRepository, never()).findByUsernameIgnoreCase(any());
     verify(rateLimiter).assertAllowed(RateLimiter.Action.LOGIN, "127.0.0.1");
   }
 

@@ -384,7 +384,6 @@ public class AuthService {
 
   private UserResponse toResponse(UserAccount user) {
     return new UserResponse(user.getId(), user.getUsername(), user.getEmail());
-    // 공개 후 미인증 계정 허용 시: user.isEmailVerified() 다시 포함.
   }
 
   private static ApiException conflictFrom(DataIntegrityViolationException ex) {

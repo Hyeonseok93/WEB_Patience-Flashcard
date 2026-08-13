@@ -80,11 +80,6 @@ public class UserAccount {
     this.sessionVersion = sessionVersion;
   }
 
-  /** 공개 후 미인증 계정 허용 시 API/가드에서 다시 쓰기. */
-  public boolean isEmailVerified() {
-    return emailVerifiedAt != null;
-  }
-
   public Instant getCreatedAt() {
     return createdAt;
   }
