@@ -6,6 +6,15 @@
 # Local audit notes — keep on disk, do not commit
 AUDIT_FIXES.md
 
+# Root IDE / Java LS helpers (backend keeps its own Gradle wrapper)
+/gradlew
+/gradlew.bat
+/gradle/
+/build.gradle.kts
+/settings.gradle.kts
+patience.code-workspace
+.vscode/
+
 **/node_modules/
 **/dist/
 **/build/
@@ -15,8 +24,5 @@ AUDIT_FIXES.md
 .DS_Store
 Thumbs.db
 .idea/
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
 *.iml
 **/bin/
