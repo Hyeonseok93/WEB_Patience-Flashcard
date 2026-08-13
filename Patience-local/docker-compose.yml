@@ -4,7 +4,7 @@
 # - JWT_COOKIE_SECURE=true (HTTPS)
 # - Mailhog 서비스 제거, 실제 SMTP
 # - frontend 80 대신 443 + TLS
-# - 5432/8080/8025 호스트 포트는 열지 않기
+# - 5432/8080 호스트 포트는 열지 않기 (메일은 /mail)
 services:
   db:
     image: postgres:15-alpine
@@ -45,11 +45,14 @@ services:
       mailhog:
         condition: service_started
 
-  # 로컬 인증 메일 확인용. 공개 서비스에서는 이 블록을 빼고 실제 SMTP 쓰기.
+  # 로컬 인증 메일 확인용 (UI: http://localhost/mail). 공개 서비스에서는 이 블록을 빼고 실제 SMTP 쓰기.
+  # Mailhog는 하위 경로(/mail)를 못 써서, 같은 SMTP(1025)인 Mailpit 사용.
   mailhog:
-    image: mailhog/mailhog:v1.0.1
-    ports:
-      - "127.0.0.1:8025:8025"
+    image: axllent/mailpit:v1.27
+    command: ["--webroot", "/mail"]
+    expose:
+      - "1025"
+      - "8025"
 
   frontend:
     build:
@@ -59,6 +62,7 @@ services:
       - "127.0.0.1:80:80"
     depends_on:
       - backend
+      - mailhog
 
 volumes:
   pgdata:
