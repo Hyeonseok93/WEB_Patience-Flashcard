@@ -299,10 +299,14 @@ public class DeckService {
   private Deck requireOwnedUserDeck(Long deckId, UserAccount user) {
     Deck deck =
         deckRepository
-            .findByIdAndOwner(deckId, user)
+            .findById(deckId)
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "세트를 찾을 수 없습니다."));
-    if (deck.getSourceType() != DeckSourceType.USER) {
+    if (deck.getSourceType() == DeckSourceType.BUILTIN) {
       throw new ApiException(HttpStatus.FORBIDDEN, "기본 제공 세트는 수정할 수 없습니다.");
+    }
+    if (deck.getOwner() == null || !deck.getOwner().getId().equals(user.getId())) {
+      // Hide other users' decks (same as missing) to avoid IDOR probing.
+      throw new ApiException(HttpStatus.NOT_FOUND, "세트를 찾을 수 없습니다.");
     }
     return deck;
   }
@@ -356,19 +360,16 @@ public class DeckService {
 
   private String uniqueCopyName(UserAccount user, String sourceName) {
     String base = sourceName == null || sourceName.isBlank() ? "세트" : sourceName.trim();
-    if (base.length() > 190) {
-      base = base.substring(0, 190);
-    }
-    String candidate = base + " 복사";
-    int n = 2;
-    while (deckRepository.existsByOwnerAndNameIgnoreCase(user, candidate)) {
-      candidate = base + " 복사 " + n;
-      n++;
-      if (candidate.length() > 200) {
-        candidate = candidate.substring(0, 200);
+    for (int n = 1; n < 10_000; n++) {
+      String suffix = n == 1 ? " 복사" : " 복사 " + n;
+      int maxBase = Math.max(1, 200 - suffix.length());
+      String stem = base.length() > maxBase ? base.substring(0, maxBase) : base;
+      String candidate = stem + suffix;
+      if (!deckRepository.existsByOwnerAndNameIgnoreCase(user, candidate)) {
+        return candidate;
       }
     }
-    return candidate;
+    throw new ApiException(HttpStatus.CONFLICT, "같은 이름의 세트가 너무 많아요.");
   }
 
   private String resolveDeckName(

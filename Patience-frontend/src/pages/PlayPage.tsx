@@ -16,6 +16,7 @@ import { usePlaySession } from "../play/usePlaySession";
 import { usePlaySettings } from "../play/usePlaySettings";
 import { toPayload } from "../play/progressCodec";
 import type { GameSnapshot } from "../play/engine";
+import DeckGateError from "../components/DeckGateError";
 import LevelPicker from "../ui/LevelPicker";
 
 export default function PlayPage() {
@@ -96,16 +97,10 @@ export default function PlayPage() {
 
   if (session.error || !session.snapshot || !displayLookup) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-5 text-center">
-        <img src="/logo.png" alt="" className="mb-4 h-16 w-16" />
-        <p className="text-[#8a3b24]">{session.error ?? "세트를 열 수 없습니다."}</p>
-        <Link
-          to="/"
-          className="mt-6 rounded-full bg-[var(--moss)] px-6 py-3 text-sm font-semibold text-[var(--sand)]"
-        >
-          세트 선택으로
-        </Link>
-      </main>
+      <DeckGateError
+        accessDenied={session.accessDenied}
+        message={session.error ?? "세트를 열 수 없습니다."}
+      />
     );
   }
 

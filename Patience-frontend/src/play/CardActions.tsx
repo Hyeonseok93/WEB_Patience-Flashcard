@@ -2,6 +2,11 @@ import { type ReactNode } from "react";
 import { playAction, type ApplyOptions, type PlayActionKind } from "./actions";
 import { type GameSnapshot } from "./engine";
 
+export function shortcutHint(lv: number): string {
+  const base = "단축키: 클릭/Space/Enter · 기억 1/→ · 까먹음 2/←";
+  return lv === 1 ? `${base} · 다음 3/N` : base;
+}
+
 export function CardActions({
   lv,
   cardId,

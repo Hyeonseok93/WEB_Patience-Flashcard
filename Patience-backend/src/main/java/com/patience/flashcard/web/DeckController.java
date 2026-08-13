@@ -96,6 +96,7 @@ public class DeckController {
   }
 
   @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @ResponseStatus(HttpStatus.CREATED)
   public DeckSummaryResponse importDeck(
       Authentication authentication,
       @RequestParam(value = "name", required = false) String name,

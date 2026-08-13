@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, api } from "../api/client";
+import { ApiError, api, type ProgressPayload } from "../api/client";
 import { useToast } from "../ui/toast-context";
 import { type ApplyOptions } from "./actions";
 import {
@@ -22,6 +22,7 @@ import {
 } from "./layout";
 import {
   buildCardLookup,
+  buildClearedVictory,
   buildFresh,
   buildFromSaved,
   DEFAULT_LEVEL_COUNT,
@@ -52,6 +53,7 @@ export function usePlaySession(deckId: number) {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [resetMode, setResetMode] = useState<StartMode | null>(null);
   const [exiting, setExiting] = useState(false);
@@ -86,6 +88,7 @@ export function usePlaySession(deckId: number) {
         if (cancelled) return;
 
         if (!detail.cards.length) {
+          setAccessDenied(false);
           setError("이 세트에 카드가 없습니다.");
           return;
         }
@@ -105,35 +108,32 @@ export function usePlaySession(deckId: number) {
             if (cancelled) return;
             next = buildFresh(nextLookup.ids, startIntent.mode, startIntent.levels, shuffle);
             navigate(`/play/${deckId}`, { replace: true });
-          } else if (progress.exists) {
-            const parsed = buildFromSaved(progress, nextLookup);
-            next =
-              parsed ??
-              buildFresh(nextLookup.ids, startIntent.mode, startIntent.levels, shuffle);
           } else {
-            next = buildFresh(nextLookup.ids, startIntent.mode, startIntent.levels, shuffle);
+            next = resumeOrFresh(progress, nextLookup, startIntent.mode, startIntent.levels);
           }
-        } else if (progress.exists) {
-          const parsed = buildFromSaved(progress, nextLookup);
-          if (parsed) {
-            next = parsed;
-          } else {
+        } else {
+          const parsed = progress.exists ? buildFromSaved(progress, nextLookup) : null;
+          if (progress.exists && !parsed) {
             toast.error("저장된 진행도를 읽을 수 없어 처음부터 시작해요.");
-            next = buildFresh(nextLookup.ids, "order", startIntent.levels, shuffle);
             try {
               await api.resetProgress(deckId);
             } catch {
               /* next autosave overwrites */
             }
+            next = buildFresh(nextLookup.ids, "order", startIntent.levels, shuffle);
+          } else {
+            next =
+              parsed ??
+              buildClearedVictory(progress, nextLookup) ??
+              buildFresh(nextLookup.ids, "order", startIntent.levels, shuffle);
           }
-        } else {
-          next = buildFresh(nextLookup.ids, "order", startIntent.levels, shuffle);
         }
 
         setSnapshot(next);
         prevCompleted.current = next.completedCount;
       } catch (err) {
         if (!cancelled) {
+          setAccessDenied(err instanceof ApiError && err.status === 403);
           setError(err instanceof ApiError ? err.message : "플레이 데이터를 불러오지 못했습니다.");
         }
       } finally {
@@ -271,6 +271,7 @@ export function usePlaySession(deckId: number) {
   return {
     loading,
     error,
+    accessDenied,
     deckName,
     lookup,
     snapshot,
@@ -289,4 +290,22 @@ export function usePlaySession(deckId: number) {
     apply,
     restart,
   };
+}
+
+function resumeOrFresh(
+  progress: ProgressPayload,
+  lookup: CardLookup,
+  mode: StartMode,
+  levels: number,
+): GameSnapshot {
+  if (progress.exists) {
+    return (
+      buildFromSaved(progress, lookup) ??
+      buildFresh(lookup.ids, mode, levels, shuffle)
+    );
+  }
+  return (
+    buildClearedVictory(progress, lookup) ??
+    buildFresh(lookup.ids, mode, levels, shuffle)
+  );
 }

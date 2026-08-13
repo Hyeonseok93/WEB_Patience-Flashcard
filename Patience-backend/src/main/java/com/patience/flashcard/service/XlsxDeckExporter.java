@@ -1,12 +1,14 @@
 package com.patience.flashcard.service;
 
 import com.patience.flashcard.domain.Card;
+import com.patience.flashcard.web.ApiException;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -28,7 +30,7 @@ public class XlsxDeckExporter {
       workbook.write(out);
       return out.toByteArray();
     } catch (Exception ex) {
-      throw new IllegalStateException("xlsx export failed", ex);
+      throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "엑셀보내기에 실패했습니다.");
     }
   }
 }

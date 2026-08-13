@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCardLookup, buildFromSaved, buildFresh } from "./progressCodec";
+import { buildCardLookup, buildClearedVictory, buildFromSaved, buildFresh } from "./progressCodec";
 
 const cards = [
   { id: 11, front: "あ", back: "a" },
@@ -57,6 +57,43 @@ describe("buildFromSaved", () => {
         completedCount: 0,
         clearCount: 0,
         exists: true,
+      },
+      lookup,
+    );
+    expect(snap).toBeNull();
+  });
+});
+
+describe("buildClearedVictory", () => {
+  it("restores empty cleared stub as victory", () => {
+    const lookup = buildCardLookup(cards);
+    const snap = buildClearedVictory(
+      {
+        deckId: 1,
+        levelsJson: JSON.stringify({ 1: [], 2: [], 3: [] }),
+        queueJson: "[]",
+        completedCount: 3,
+        clearCount: 2,
+        exists: false,
+      },
+      lookup,
+    );
+    expect(snap).not.toBeNull();
+    expect(snap!.completedCount).toBe(3);
+    expect(snap!.levels[1]).toEqual([]);
+    expect(snap!.queue).toEqual([]);
+  });
+
+  it("ignores inactive stubs with no completed cards", () => {
+    const lookup = buildCardLookup(cards);
+    const snap = buildClearedVictory(
+      {
+        deckId: 1,
+        levelsJson: JSON.stringify({ 1: [], 2: [], 3: [] }),
+        queueJson: "[]",
+        completedCount: 0,
+        clearCount: 2,
+        exists: false,
       },
       lookup,
     );

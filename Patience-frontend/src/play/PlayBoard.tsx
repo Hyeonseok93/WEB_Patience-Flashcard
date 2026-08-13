@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from "react";
 import { type ApplyOptions } from "./actions";
-import { CardActions } from "./CardActions";
+import { CardActions, shortcutHint } from "./CardActions";
 import { type GameSnapshot } from "./engine";
 import { CLASSIC_CARD_H_RATIO, FOCUS_CARD_ASPECT, FOCUS_CARD_RATIO, LAYOUT, STACK_IN_MS } from "./layout";
 import { levelLabel } from "./labels";
@@ -191,7 +191,7 @@ export function FocusPane({
       <div className={`shrink-0 ${isTop ? "pt-1" : "pt-2"}`}>
         <CardActions lv={active} cardId={cardId} snapshot={snapshot} exiting={exiting} onAction={onAction} />
         <p className="mt-1.5 hidden text-center text-[0.7rem] text-[var(--ink)]/35 lg:block">
-          단축키: 카드 클릭 또는 Space · 기억 1 · 까먹음 2 · 다음 3
+          {shortcutHint(active)}
         </p>
       </div>
     );
@@ -363,7 +363,7 @@ function LevelSection({
                   <>
                     <CardActions lv={lv} cardId={cardId} snapshot={snapshot} exiting={exiting} onAction={onAction} />
                     <p className="mt-2 text-[0.7rem] text-[var(--ink)]/35">
-                      단축키: 카드 클릭 또는 Space · 기억 1 · 까먹음 2 · 다음 3
+                      {shortcutHint(lv)}
                     </p>
                   </>
                 )}

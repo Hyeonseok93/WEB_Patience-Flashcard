@@ -3,6 +3,9 @@
 !.env.example
 .docker-secrets/
 
+# Local audit notes — keep on disk, do not commit
+AUDIT_FIXES.md
+
 **/node_modules/
 **/dist/
 **/build/

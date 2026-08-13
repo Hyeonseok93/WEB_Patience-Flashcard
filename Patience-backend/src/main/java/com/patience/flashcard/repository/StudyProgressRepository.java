@@ -22,7 +22,7 @@ public interface StudyProgressRepository extends JpaRepository<StudyProgress, Lo
    * Atomic insert-or-update. {@code clear_count} increments in SQL when completed_count first
    * reaches {@code deckSize}, so concurrent victory saves cannot double-count.
    */
-  @Modifying
+  @Modifying(clearAutomatically = true)
   @Query(
       value =
           "INSERT INTO study_progress (user_id, deck_id, levels_json, queue_json, completed_count, clear_count, updated_at) "
@@ -52,7 +52,7 @@ public interface StudyProgressRepository extends JpaRepository<StudyProgress, Lo
    * Drop play state but keep clear_count by rewriting to an inactive stub. Prefer delete when
    * clear_count is already 0 (handled in service).
    */
-  @Modifying
+  @Modifying(clearAutomatically = true)
   @Query(
       value =
           "UPDATE study_progress SET levels_json = cast(:levelsJson AS jsonb), "

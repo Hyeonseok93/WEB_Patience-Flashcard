@@ -77,7 +77,6 @@ export default function DecksPage() {
   async function onImport(file: File | null) {
     if (!file) return;
     setImporting(true);
-    setError(null);
     try {
       const created = await api.importDeck(file, deckName || undefined);
       setMine((prev) => [created, ...prev]);
@@ -87,7 +86,6 @@ export default function DecksPage() {
       toast.success(`「${created.name}」 세트를 만들었어요`);
     } catch (err) {
       const message = messageOf(err, "가져오기에 실패했습니다.");
-      setError(message);
       toast.error(message);
     } finally {
       setImporting(false);
@@ -98,7 +96,6 @@ export default function DecksPage() {
   async function onCreateEmpty() {
     const name = deckName.trim() || "새 세트";
     setCreating(true);
-    setError(null);
     try {
       const created = await api.createDeck(name);
       setMine((prev) => [created, ...prev]);
@@ -109,7 +106,6 @@ export default function DecksPage() {
       navigate(`/decks/${created.id}/edit`);
     } catch (err) {
       const message = messageOf(err, "세트를 만들지 못했습니다.");
-      setError(message);
       toast.error(message);
     } finally {
       setCreating(false);
@@ -119,7 +115,6 @@ export default function DecksPage() {
   async function onCopy() {
     if (selectedId == null) return;
     setCopying(true);
-    setError(null);
     try {
       const created = await api.copyDeck(selectedId);
       setMine((prev) => [created, ...prev]);
@@ -128,9 +123,7 @@ export default function DecksPage() {
       toast.success(`「${created.name}」으로 복사했어요`);
       navigate(`/decks/${created.id}/edit`);
     } catch (err) {
-      const message = messageOf(err, "복사에 실패했습니다.");
-      setError(message);
-      toast.error(message);
+      toast.error(messageOf(err, "복사에 실패했습니다."));
     } finally {
       setCopying(false);
     }
@@ -147,9 +140,7 @@ export default function DecksPage() {
       await api.exportDeck(selectedId, `${selectedDeck.name}.xlsx`);
       toast.success("엑셀로 내려받았어요");
     } catch (err) {
-      const message = messageOf(err, "내보내기에 실패했습니다.");
-      setError(message);
-      toast.error(message);
+      toast.error(messageOf(err, "내보내기에 실패했습니다."));
     } finally {
       setExporting(false);
     }
@@ -171,9 +162,7 @@ export default function DecksPage() {
       setSelectedId(null);
       toast.success("세트를 삭제했어요");
     } catch (err) {
-      const message = messageOf(err, "삭제에 실패했습니다.");
-      setError(message);
-      toast.error(message);
+      toast.error(messageOf(err, "삭제에 실패했습니다."));
     }
   }
 

@@ -4,6 +4,7 @@ import {
   fillLevel1,
   MAX_LEVELS,
   MIN_LEVELS,
+  totalRemaining,
   type GameSnapshot,
 } from "./engine";
 
@@ -104,6 +105,21 @@ export function buildFresh(
   const levels = emptyLevels(levelCount);
   fillLevel1(levels, queue);
   return { levelCount, levels, queue, completedCount: 0 };
+}
+
+/**
+ * Cleared decks are stored as inactive stubs ({@code exists: false}) with empty
+ * levels/queue but {@code completedCount > 0}. Restore that as a victory snapshot
+ * so refresh does not silently start a new run.
+ */
+export function buildClearedVictory(
+  progress: ProgressPayload,
+  lookup: CardLookup,
+): GameSnapshot | null {
+  if (progress.completedCount <= 0) return null;
+  const parsed = buildFromSaved(progress, lookup);
+  if (!parsed || totalRemaining(parsed) !== 0) return null;
+  return parsed;
 }
 
 export function toPayload(s: GameSnapshot) {

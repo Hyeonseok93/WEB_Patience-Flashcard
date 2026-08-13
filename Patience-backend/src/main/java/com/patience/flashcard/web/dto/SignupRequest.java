@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 public record SignupRequest(
     @NotBlank(message = "닉네임을 입력해 주세요.")
         @Size(min = 3, max = 10, message = "닉네임은 3–10자예요.")
-        @Pattern(regexp = "^[a-zA-Z0-9]+$", message = "영문과 숫자만 쓸 수 있어요.")
+        @Pattern(regexp = "^[a-z0-9]+$", message = "영문 소문자와 숫자만 쓸 수 있어요.")
         String username,
     @NotBlank(message = "이메일을 입력해 주세요.")
         @Size(max = 254, message = "이메일이 너무 길어요.")

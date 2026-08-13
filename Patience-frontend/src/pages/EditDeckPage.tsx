@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type CardItem, type DeckDetail } from "../api/client";
+import { ApiError, api, type CardItem, type DeckDetail } from "../api/client";
+import DeckGateError from "../components/DeckGateError";
 import { messageOf } from "../lib/errors";
 import { useConfirm } from "../ui/confirm-context";
 import { useToast } from "../ui/toast-context";
@@ -17,6 +18,7 @@ export default function EditDeckPage() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [savingName, setSavingName] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const [front, setFront] = useState("");
@@ -38,13 +40,17 @@ export default function EditDeckPage() {
         const detail = await api.deckDetail(deckId);
         if (cancelled) return;
         if (detail.sourceType !== "USER") {
-          navigate("/", { replace: true });
+          setAccessDenied(true);
+          setError("기본 제공 세트는 수정할 수 없습니다.");
           return;
         }
         setDeck(detail);
         setName(detail.name);
       } catch (err) {
-        if (!cancelled) setError(messageOf(err, "세트를 불러오지 못했습니다."));
+        if (!cancelled) {
+          setAccessDenied(err instanceof ApiError && err.status === 403);
+          setError(messageOf(err, "세트를 불러오지 못했습니다."));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -167,14 +173,7 @@ export default function EditDeckPage() {
   }
 
   if (error || !deck) {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-5 text-center">
-        <p className="text-[#8a3b24]">{error ?? "세트를 열 수 없습니다."}</p>
-        <Link to="/" className="mt-6 rounded-full bg-[var(--moss)] px-6 py-3 text-sm font-semibold text-[var(--sand)]">
-          세트 선택으로
-        </Link>
-      </main>
-    );
+    return <DeckGateError accessDenied={accessDenied} message={error ?? "세트를 열 수 없습니다."} />;
   }
 
   return (

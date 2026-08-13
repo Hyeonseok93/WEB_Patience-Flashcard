@@ -7,11 +7,10 @@ import { useAvailableField } from "../auth/useAvailableField";
 import {
   USERNAME_MAX,
   normalizeUsername,
-  passwordStrength,
   usernameInvalidReason,
 } from "../auth/usernameRules";
 import { rememberJustJoined } from "../auth/welcome";
-import { PasswordMeter } from "./PasswordMeter";
+import { NewPasswordFields } from "./NewPasswordFields";
 import { fieldClass } from "../lib/fieldClass";
 import { messageOf } from "../lib/errors";
 
@@ -22,8 +21,6 @@ export function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [capsOn, setCapsOn] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [code, setCode] = useState("");
@@ -45,10 +42,6 @@ export function SignupForm() {
     setCodeNote(null);
   }, [email]);
 
-  const strength = passwordStrength(password);
-  const passwordShort = password.length > 0 && password.length < 8;
-  const passwordLong = password.length > 72;
-  const confirmMismatch = confirm.length > 0 && confirm !== password;
   const canChallenge = mail.ok && !mail.checking && !challengePending && !verified;
   const canConfirm = challengeSent && !verified && code.length === 6 && !confirmPending;
   const canSubmit =
@@ -122,8 +115,6 @@ export function SignupForm() {
 
   const nickTone = !username || nick.checking ? "default" : nick.ok ? "ok" : nick.note ? "bad" : "default";
   const mailTone = verified ? "ok" : !email || mail.checking ? "default" : mail.ok ? "ok" : mail.note ? "bad" : "default";
-  const passwordTone = passwordShort || passwordLong ? "bad" : "default";
-  const confirmTone = confirmMismatch ? "bad" : confirm.length > 0 && confirm === password ? "ok" : "default";
 
   return (
     <>
@@ -224,57 +215,13 @@ export function SignupForm() {
           <p className="text-xs font-medium text-[var(--leaf)]">메일 인증이 완료됐어요.</p>
         ) : null}
 
-        <div className="space-y-3 rounded-3xl bg-[var(--sand)]/35 p-4 ring-1 ring-[var(--mist)]">
-          <label className="block text-sm font-medium text-[var(--ink)]/80">
-            비밀번호
-            <div className="relative mt-1.5">
-              <input
-                type={showPassword ? "text" : "password"}
-                className={`${fieldClass("gold", passwordTone)} pr-12`}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyUp={(e) => setCapsOn(e.getModifierState("CapsLock"))}
-                onKeyDown={(e) => setCapsOn(e.getModifierState("CapsLock"))}
-                autoComplete="new-password"
-                maxLength={72}
-                aria-invalid={passwordShort || passwordLong}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute inset-y-0 right-3 text-[0.7rem] font-semibold text-[var(--ink)]/45 hover:text-[var(--ink)]/70"
-                aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
-              >
-                {showPassword ? "숨김" : "보기"}
-              </button>
-            </div>
-          </label>
-
-          <label className="block text-sm font-medium text-[var(--ink)]/80">
-            비밀번호 확인
-            <input
-              type={showPassword ? "text" : "password"}
-              className={`mt-1.5 ${fieldClass("gold", confirmTone)}`}
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              onKeyUp={(e) => setCapsOn(e.getModifierState("CapsLock"))}
-              onKeyDown={(e) => setCapsOn(e.getModifierState("CapsLock"))}
-              autoComplete="new-password"
-              maxLength={72}
-              aria-invalid={confirmMismatch}
-            />
-          </label>
-
-          <PasswordMeter level={strength.level} label={strength.label} />
-
-          {passwordShort ? (
-            <p className="text-xs text-[#8a3b24]">비밀번호는 8자 이상이어야 해요.</p>
-          ) : null}
-          {confirmMismatch ? (
-            <p className="text-xs text-[#8a3b24]">비밀번호가 서로 달라요.</p>
-          ) : null}
-          {capsOn ? <p className="text-xs text-[var(--ink)]/50">Caps Lock이 켜져 있어요.</p> : null}
-        </div>
+        <NewPasswordFields
+          accent="gold"
+          password={password}
+          confirm={confirm}
+          onPasswordChange={setPassword}
+          onConfirmChange={setConfirm}
+        />
 
         {formError ? (
           <p className="text-xs text-[#8a3b24]" role="alert">

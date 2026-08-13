@@ -33,7 +33,9 @@ public class XlsxDeckImporter {
       throw new ApiException(HttpStatus.BAD_REQUEST, "파일이 비어 있습니다.");
     }
     if (file.getSize() > importProperties.maxBytes()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "파일 용량이 너무 큽니다. (최대 2MB)");
+      long maxMb = Math.max(1, importProperties.maxBytes() / (1024 * 1024));
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST, "파일 용량이 너무 큽니다. (최대 " + maxMb + "MB)");
     }
     String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
     if (!filename.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {

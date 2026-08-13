@@ -120,31 +120,8 @@ public class AuthService {
   public MessageResponse confirmEmailCode(
       String rawEmail, String code, String clientIp, HttpServletResponse response) {
     String email = EmailRules.normalize(rawEmail);
-    String invalid = EmailRules.invalidReason(email);
-    if (invalid != null) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
-    }
-    if (code == null || !code.matches("^\\d{6}$")) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호 6자리를 입력해 주세요.");
-    }
-    rateLimiter.assertAllowed(RateLimiter.Action.CONFIRM, clientIp + ":" + email);
     EmailChallenge row =
-        challenges
-            .findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
-                email, EmailChallenge.PURPOSE_SIGNUP)
-            .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "먼저 인증하기를 눌러 주세요."));
-    if (row.getExpiresAt().isBefore(Instant.now())) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 만료됐어요. 다시 보내 주세요.");
-    }
-    if (!TokenHasher.codeHash(email, code).equals(row.getCodeHash())) {
-      int failures = row.getFailedAttempts() + 1;
-      row.setFailedAttempts(failures);
-      if (failures >= MAX_CONFIRM_FAILURES) {
-        challenges.delete(row);
-        throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 너무 틀렸어요. 다시 보내 주세요.");
-      }
-      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 달라요.");
-    }
+        requireMatchingCode(email, code, EmailChallenge.PURPOSE_SIGNUP, clientIp + ":" + email);
     String proof = TokenHasher.newRawToken();
     Instant proofExpires = Instant.now().plus(CODE_TTL);
     row.setConfirmedAt(Instant.now());
@@ -258,31 +235,9 @@ public class AuthService {
   @Transactional(noRollbackFor = ApiException.class)
   public MessageResponse resetPassword(String rawEmail, String code, String newPassword, String clientIp) {
     String email = EmailRules.normalize(rawEmail);
-    String invalid = EmailRules.invalidReason(email);
-    if (invalid != null) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
-    }
-    if (code == null || !code.matches("^\\d{6}$")) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호 6자리를 입력해 주세요.");
-    }
-    rateLimiter.assertAllowed(RateLimiter.Action.CONFIRM, clientIp + ":reset:" + email);
     EmailChallenge row =
-        challenges
-            .findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(
-                email, EmailChallenge.PURPOSE_RESET)
-            .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "먼저 인증하기를 눌러 주세요."));
-    if (row.getExpiresAt().isBefore(Instant.now())) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 만료됐어요. 다시 보내 주세요.");
-    }
-    if (!TokenHasher.codeHash(email, code).equals(row.getCodeHash())) {
-      int failures = row.getFailedAttempts() + 1;
-      row.setFailedAttempts(failures);
-      if (failures >= MAX_CONFIRM_FAILURES) {
-        challenges.delete(row);
-        throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 너무 틀렸어요. 다시 보내 주세요.");
-      }
-      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 달라요.");
-    }
+        requireMatchingCode(
+            email, code, EmailChallenge.PURPOSE_RESET, clientIp + ":reset:" + email);
     UserAccount user =
         userRepository
             .findByEmailIgnoreCase(email)
@@ -328,6 +283,36 @@ public class AuthService {
     row.setEmail(email);
     row.setPurpose(purpose);
     row.setExpiresAt(Instant.now().plus(CODE_TTL));
+    return row;
+  }
+
+  /** Shared OTP check for signup confirm + password reset. */
+  private EmailChallenge requireMatchingCode(
+      String email, String code, String purpose, String rateKey) {
+    String invalid = EmailRules.invalidReason(email);
+    if (invalid != null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, invalid);
+    }
+    if (code == null || !code.matches("^\\d{6}$")) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호 6자리를 입력해 주세요.");
+    }
+    rateLimiter.assertAllowed(RateLimiter.Action.CONFIRM, rateKey);
+    EmailChallenge row =
+        challenges
+            .findFirstByEmailAndPurposeAndConsumedAtIsNullOrderByExpiresAtDesc(email, purpose)
+            .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "먼저 인증하기를 눌러 주세요."));
+    if (row.getExpiresAt().isBefore(Instant.now())) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 만료됐어요. 다시 보내 주세요.");
+    }
+    if (!TokenHasher.codeHash(email, code).equals(row.getCodeHash())) {
+      int failures = row.getFailedAttempts() + 1;
+      row.setFailedAttempts(failures);
+      if (failures >= MAX_CONFIRM_FAILURES) {
+        challenges.delete(row);
+        throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 너무 틀렸어요. 다시 보내 주세요.");
+      }
+      throw new ApiException(HttpStatus.BAD_REQUEST, "인증 번호가 달라요.");
+    }
     return row;
   }
 
