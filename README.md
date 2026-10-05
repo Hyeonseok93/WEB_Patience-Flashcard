@@ -139,7 +139,7 @@ React에서 세트 목록·편집·플레이 UI를 제공하고, Spring Boot가 
 
 ---
 
-## 🖥️ Preview · [자세히 보기](https://bulldog93.tistory.com/59)
+## 🖥️ Preview · [자세히 보기](https://hyeonseok93.github.io/posts/patience-flashcard/)
 
 <p align="center">
   <img src=".github/readme/preview.png" alt="Patience preview" width="720" />
@@ -199,7 +199,7 @@ PostgreSQL에 **users · decks · cards · study_progress · email_challenges ·
 
 주요 표면은 `/api/auth/*`, `/api/decks/*`(builtin · mine · copy · import · progress), Nginx가 SPA와 `/api` 프록시를 담당합니다. 로컬 메일 UI는 `/mail`.
 
-> 상세 ERD·API·진행도 보존·인증 경계 설계 기록은 [기술 블로그(Patience Flashcard)](https://bulldog93.tistory.com/59)에서 다룹니다.
+> 상세 ERD·API·진행도 보존·인증 경계 설계 기록은 [기술 블로그(Patience Flashcard)](https://hyeonseok93.github.io/posts/patience-flashcard/)에서 다룹니다.
 
 ---
 
@@ -243,7 +243,7 @@ Browser ──► nginx (FE :80)
 
 로컬 Compose는 **frontend · backend · db · mailpit** 을 올립니다. 공개 배포 시에는 Mailpit을 빼고 실제 SMTP를 쓰고, `SPRING_PROFILES_ACTIVE=prod` + 고유 `JWT_SECRET` / DB 비밀번호 / HTTPS 쿠키를 맞춥니다.
 
-> 로컬 Compose·CI·화면 흐름 등 상세 기록은 [기술 블로그](https://bulldog93.tistory.com/59)에서 다룹니다.
+> 로컬 Compose·CI·화면 흐름 등 상세 기록은 [기술 블로그](https://hyeonseok93.github.io/posts/patience-flashcard/)에서 다룹니다.
 
 ---
 
